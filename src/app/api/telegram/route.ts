@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const TELEGRAM_SUPPRESS_SEND = (process.env.TELEGRAM_SUPPRESS_SEND || "").toLowerCase() === "true" || process.env.TELEGRAM_SUPPRESS_SEND === "1";
 
 async function sendTelegramMessage(chatId: number, text: string) {
+  if (TELEGRAM_SUPPRESS_SEND) {
+    console.warn("TELEGRAM_SUPPRESS_SEND=true; skipping Telegram send (local dev)");
+    return;
+  }
   if (!TELEGRAM_BOT_TOKEN) {
     console.warn("TELEGRAM_BOT_TOKEN not set; skipping Telegram send (local dev)");
     return;
@@ -17,7 +23,8 @@ async function sendTelegramMessage(chatId: number, text: string) {
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Telegram sendMessage failed: ${res.status} ${body}`);
+    console.error(`Telegram sendMessage failed: ${res.status} ${body}`);
+    return;
   }
 }
 
@@ -30,14 +37,74 @@ function parseCommand(text: string | undefined) {
   return { cmd: cmd.toLowerCase(), args } as const;
 }
 
+function chunkForTelegram(text: string, max = 3500): string[] {
+  if (text.length <= max) return [text];
+  const paragraphs = text.split(/\n\n+/);
+  const chunks: string[] = [];
+  let current = "";
+  for (const p of paragraphs) {
+    const seg = current ? current + "\n\n" + p : p;
+    if (seg.length <= max) {
+      current = seg;
+    } else {
+      if (current) chunks.push(current);
+      if (p.length <= max) {
+        current = p;
+      } else {
+        for (let i = 0; i < p.length; i += max) {
+          chunks.push(p.slice(i, i + max));
+        }
+        current = "";
+      }
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+async function generatePrepChecklist(topic: string): Promise<string> {
+  if (!OPENAI_API_KEY) {
+    return `Prep checklist for: ${topic}\n\n- Goals and context\n- Key questions (3-5)\n- Constraints (time, budget, risks)\n- Next steps & follow-up\n\n(Add OPENAI_API_KEY to get detailed suggestions.)`;
+  }
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      temperature: 0.4,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You generate concise, practical meeting preparation checklists. Use short bullets, grouped by 2-3 sections with headings. Focus on questions to ask and items to bring. Limit total to ~20 bullets.",
+        },
+        { role: "user", content: `Topic: ${topic}` },
+      ],
+    }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`OpenAI error: ${res.status} ${t}`);
+  }
+  const data = await res.json();
+  const text = data?.choices?.[0]?.message?.content?.trim();
+  return text || `Could not generate checklist for: ${topic}`;
+}
+
 export async function POST(req: NextRequest) {
   try {
     if (!TELEGRAM_WEBHOOK_SECRET) {
       return NextResponse.json({ error: "Missing TELEGRAM_WEBHOOK_SECRET" }, { status: 500 });
     }
 
-    const auth = req.nextUrl.searchParams.get("secret");
+    const url = new URL(req.url);
+    const auth = url.searchParams.get("secret");
     if (auth !== TELEGRAM_WEBHOOK_SECRET) {
+      console.error("telegram webhook auth failed or missing secret");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -75,10 +142,11 @@ export async function POST(req: NextRequest) {
             await sendTelegramMessage(chatId, "Please provide a topic. Example: /prep doctor");
             return NextResponse.json({ ok: true });
           }
-          await sendTelegramMessage(
-            chatId,
-            `Preparing for: ${topic}\n\n(Next: AI-generated checklist; for now this is a placeholder.)`
-          );
+          const checklist = await generatePrepChecklist(topic);
+          const parts = chunkForTelegram(checklist);
+          for (const part of parts) {
+            await sendTelegramMessage(chatId, part);
+          }
           return NextResponse.json({ ok: true });
         }
         case "/agenda": {
@@ -98,8 +166,8 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    console.error("telegram webhook error", err);
+  } catch (error: unknown) {
+    console.error("telegram webhook error", error);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 } 

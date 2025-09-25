@@ -5,51 +5,39 @@ A minimal Next.js app + Telegram webhook to help you prep any meeting.
 ## Local development
 
 ```bash
-# install deps
 npm install
-
-# run dev server
+cp .env.sample .env.local # if present, or create manually
 npm run dev
-# http://localhost:3000
 ```
 
 ## Environment variables
 
-Create `.env.local` in the project root (not committed):
+Create `.env.local` for local (not committed) and set in Vercel for production:
 
 ```
-TELEGRAM_BOT_TOKEN=123456:ABC... # from @BotFather
+APP_BASE_URL=https://YOUR_DOMAIN # Vercel production
+TELEGRAM_BOT_TOKEN=123456:ABC...  # from @BotFather
 TELEGRAM_WEBHOOK_SECRET=your-random-secret
+OPENAI_API_KEY=sk-...             # optional locally; required for AI checklists
 ```
 
-## Telegram webhook (Vercel)
+## Telegram bot setup
 
-1. Create a bot with `@BotFather`, copy the token.
-2. Deploy this repo to Vercel (set the env vars in Project Settings → Environment Variables).
-3. Find your production domain, e.g. `https://prepmymeeting.vercel.app`.
-4. Set Telegram webhook (replace placeholders):
-
-```bash
-curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://YOUR_DOMAIN/api/telegram?secret=YOUR_WEBHOOK_SECRET"
-  }'
-```
-
-To remove webhook:
-
-```bash
-curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/deleteWebhook"
-```
+1) Create a bot with `@BotFather` → copy token
+2) Set envs in Vercel (`APP_BASE_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `OPENAI_API_KEY` optional)
+3) Set webhook:
+   - POST `https://YOUR_DOMAIN/api/telegram/set-webhook`
+   - or manual `setWebhook` curl
 
 ## Commands
 
-- `/start`: welcome message
-- Text message: echo back for now; LLM flow coming next.
+- `/start`, `/help`
+- `/prep <topic>` → AI checklist via OpenAI when key is set
+- `/agenda` (placeholder)
+- Any text → echo (for now)
 
 ## Roadmap
 
-- Whisper STT for voice notes
+- Voice (Whisper) + TTS
 - Link ingestion + RAG
-- Meeting personas & calendar context
+- Calendar context

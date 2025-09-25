@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 const APP_BASE_URL = process.env.APP_BASE_URL; // e.g., https://prepmymeeting.vercel.app
 
-export async function POST(_req: NextRequest) {
+export async function POST() {
   try {
     if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_WEBHOOK_SECRET || !APP_BASE_URL) {
       return NextResponse.json({ error: "Missing env: TELEGRAM_BOT_TOKEN/TELEGRAM_WEBHOOK_SECRET/APP_BASE_URL" }, { status: 500 });
@@ -23,8 +23,8 @@ export async function POST(_req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, url: webhookUrl, telegram: data });
-  } catch (err: any) {
-    console.error("set-webhook error", err);
+  } catch (error: unknown) {
+    console.error("set-webhook error", error);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 } 
