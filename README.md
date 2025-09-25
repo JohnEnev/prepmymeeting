@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PrepMyMeeting
 
-## Getting Started
+A minimal Next.js app + Telegram webhook to help you prep any meeting.
 
-First, run the development server:
+## Local development
 
 ```bash
+# install deps
+npm install
+
+# run dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Create `.env.local` in the project root (not committed):
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+TELEGRAM_BOT_TOKEN=123456:ABC... # from @BotFather
+TELEGRAM_WEBHOOK_SECRET=your-random-secret
+```
 
-## Learn More
+## Telegram webhook (Vercel)
 
-To learn more about Next.js, take a look at the following resources:
+1. Create a bot with `@BotFather`, copy the token.
+2. Deploy this repo to Vercel (set the env vars in Project Settings → Environment Variables).
+3. Find your production domain, e.g. `https://prepmymeeting.vercel.app`.
+4. Set Telegram webhook (replace placeholders):
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://YOUR_DOMAIN/api/telegram?secret=YOUR_WEBHOOK_SECRET"
+  }'
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+To remove webhook:
 
-## Deploy on Vercel
+```bash
+curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/deleteWebhook"
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Commands
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `/start`: welcome message
+- Text message: echo back for now; LLM flow coming next.
+
+## Roadmap
+
+- Whisper STT for voice notes
+- Link ingestion + RAG
+- Meeting personas & calendar context
