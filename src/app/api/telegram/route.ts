@@ -4,6 +4,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const TELEGRAM_SUPPRESS_SEND = (process.env.TELEGRAM_SUPPRESS_SEND || "").toLowerCase() === "true" || process.env.TELEGRAM_SUPPRESS_SEND === "1";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "o4-mini";
 
 async function sendTelegramMessage(chatId: number, text: string) {
   if (TELEGRAM_SUPPRESS_SEND) {
@@ -66,6 +67,7 @@ async function generatePrepChecklist(topic: string): Promise<string> {
   if (!OPENAI_API_KEY) {
     return `Prep checklist for: ${topic}\n\n- Goals and context\n- Key questions (3-5)\n- Constraints (time, budget, risks)\n- Next steps & follow-up\n\n(Add OPENAI_API_KEY to get detailed suggestions.)`;
   }
+  console.log(`OpenAI: using model ${OPENAI_MODEL}`);
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -73,7 +75,7 @@ async function generatePrepChecklist(topic: string): Promise<string> {
       Authorization: `Bearer ${OPENAI_API_KEY}`,
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
+      model: OPENAI_MODEL,
       temperature: 0.4,
       messages: [
         {
