@@ -33,9 +33,11 @@ function parseCommand(text: string | undefined) {
   if (!text) return null;
   const trimmed = text.trim();
   if (!trimmed.startsWith("/")) return null;
-  const [cmd, ...rest] = trimmed.split(/\s+/);
+  const [rawCmd, ...rest] = trimmed.split(/\s+/);
+  // Normalize "/cmd@botname" to "/cmd"
+  const cmdOnly = rawCmd.split("@")[0];
   const args = rest.join(" ");
-  return { cmd: cmd.toLowerCase(), args } as const;
+  return { cmd: cmdOnly.toLowerCase(), args } as const;
 }
 
 function chunkForTelegram(text: string, max = 3500): string[] {
@@ -68,33 +70,39 @@ async function generatePrepChecklist(topic: string): Promise<string> {
     return `Prep checklist for: ${topic}\n\n- Goals and context\n- Key questions (3-5)\n- Constraints (time, budget, risks)\n- Next steps & follow-up\n\n(Add OPENAI_API_KEY to get detailed suggestions.)`;
   }
   console.log(`OpenAI: using model ${OPENAI_MODEL}`);
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      temperature: 0.4,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You generate concise, practical meeting preparation checklists. Use short bullets, grouped by 2-3 sections with headings. Focus on questions to ask and items to bring. Limit total to ~20 bullets.",
-        },
-        { role: "user", content: `Topic: ${topic}` },
-      ],
-    }),
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`OpenAI error: ${res.status} ${t}`);
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        temperature: 0.4,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You generate concise, practical meeting preparation checklists. Use short bullets, grouped by 2-3 sections with headings. Focus on questions to ask and items to bring. Limit total to ~20 bullets.",
+          },
+          { role: "user", content: `Topic: ${topic}` },
+        ],
+      }),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      console.error(`OpenAI error: ${res.status} ${t}`);
+      return `Prep checklist for: ${topic}\n\n- Goals and context\n- Key questions (3-5)\n- Constraints (time, budget, risks)\n- Next steps & follow-up\n\n(Temporary: OpenAI error, using fallback.)`;
+    }
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content?.trim();
+    return text || `Could not generate checklist for: ${topic}`;
+  } catch (err: unknown) {
+    console.error("OpenAI request failed", err);
+    return `Prep checklist for: ${topic}\n\n- Goals and context\n- Key questions (3-5)\n- Constraints (time, budget, risks)\n- Next steps & follow-up\n\n(Temporary: OpenAI request failed, using fallback.)`;
   }
-  const data = await res.json();
-  const text = data?.choices?.[0]?.message?.content?.trim();
-  return text || `Could not generate checklist for: ${topic}`;
 }
 
 export async function POST(req: NextRequest) {
