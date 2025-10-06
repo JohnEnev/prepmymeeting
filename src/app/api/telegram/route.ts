@@ -4,7 +4,8 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const TELEGRAM_SUPPRESS_SEND = (process.env.TELEGRAM_SUPPRESS_SEND || "").toLowerCase() === "true" || process.env.TELEGRAM_SUPPRESS_SEND === "1";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "o4-mini";
+const RAW_OPENAI_MODEL = process.env.OPENAI_MODEL || "o4-mini";
+const OPENAI_MODEL = RAW_OPENAI_MODEL.replace(/^['\"]|['\"]$/g, "").trim();
 
 async function sendTelegramMessage(chatId: number, text: string) {
   if (TELEGRAM_SUPPRESS_SEND) {
@@ -65,21 +66,65 @@ function chunkForTelegram(text: string, max = 3500): string[] {
   return chunks;
 }
 
+function extractResponseText(data: any): string | null {
+  const t = (data?.output_text || "").toString().trim();
+  if (t) return t;
+  const output = Array.isArray(data?.output) ? data.output : [];
+  const parts: string[] = [];
+  for (const item of output) {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    for (const c of content) {
+      const txt = (c?.text || c?.content || "").toString();
+      if (txt) parts.push(txt);
+    }
+  }
+  if (parts.length) return parts.join("\n").trim();
+  const choice = data?.choices?.[0]?.message?.content;
+  if (typeof choice === "string" && choice.trim()) return choice.trim();
+  return null;
+}
+
 async function generatePrepChecklist(topic: string): Promise<string> {
   if (!OPENAI_API_KEY) {
     return `Prep checklist for: ${topic}\n\n- Goals and context\n- Key questions (3-5)\n- Constraints (time, budget, risks)\n- Next steps & follow-up\n\n(Add OPENAI_API_KEY to get detailed suggestions.)`;
   }
-  console.log(`OpenAI: using model ${OPENAI_MODEL}`);
+  const isO4Family = OPENAI_MODEL.toLowerCase().startsWith("o4");
+  console.log(`OpenAI: using model ${OPENAI_MODEL} via ${isO4Family ? "responses" : "chat"}`);
   try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
+    if (isO4Family) {
+      // Use Responses API for o4/o4-mini with a single string input
+      const prompt = [
+        "You generate concise, practical meeting preparation checklists.",
+        "Use short bullets, grouped by 2-3 sections with headings.",
+        "Focus on questions to ask and items to bring.",
+        "Limit total to ~20 bullets.",
+        "",
+        `Topic: ${topic}`
+      ].join("\n");
+      const res = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: OPENAI_MODEL,
+          input: prompt
+        }),
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        console.error(`OpenAI error: ${res.status} ${t}`);
+        return `Prep checklist for: ${topic}\n\n- Goals and context\n- Key questions (3-5)\n- Constraints (time, budget, risks)\n- Next steps & follow-up\n\n(Temporary: OpenAI error, using fallback.)`;
+      }
+      const data = await res.json();
+      const text = extractResponseText(data);
+      return text || `Could not generate checklist for: ${topic}`;
+    } else {
+      // Chat Completions for non-o4 models (include temperature only if not o4)
+      const payload: any = {
         model: OPENAI_MODEL,
-        temperature: 0.4,
         messages: [
           {
             role: "system",
@@ -88,17 +133,28 @@ async function generatePrepChecklist(topic: string): Promise<string> {
           },
           { role: "user", content: `Topic: ${topic}` },
         ],
-      }),
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      const t = await res.text();
-      console.error(`OpenAI error: ${res.status} ${t}`);
-      return `Prep checklist for: ${topic}\n\n- Goals and context\n- Key questions (3-5)\n- Constraints (time, budget, risks)\n- Next steps & follow-up\n\n(Temporary: OpenAI error, using fallback.)`;
+      };
+      if (!OPENAI_MODEL.toLowerCase().startsWith("o4")) {
+        payload.temperature = 0.4;
+      }
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify(payload),
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        console.error(`OpenAI error: ${res.status} ${t}`);
+        return `Prep checklist for: ${topic}\n\n- Goals and context\n- Key questions (3-5)\n- Constraints (time, budget, risks)\n- Next steps & follow-up\n\n(Temporary: OpenAI error, using fallback.)`;
+      }
+      const data = await res.json();
+      const text = extractResponseText(data);
+      return text || `Could not generate checklist for: ${topic}`;
     }
-    const data = await res.json();
-    const text = data?.choices?.[0]?.message?.content?.trim();
-    return text || `Could not generate checklist for: ${topic}`;
   } catch (err: unknown) {
     console.error("OpenAI request failed", err);
     return `Prep checklist for: ${topic}\n\n- Goals and context\n- Key questions (3-5)\n- Constraints (time, budget, risks)\n- Next steps & follow-up\n\n(Temporary: OpenAI request failed, using fallback.)`;
