@@ -67,21 +67,50 @@ function chunkForTelegram(text: string, max = 3500): string[] {
   return chunks;
 }
 
-function extractResponseText(data: any): string | null {
-  const t = (data?.output_text || "").toString().trim();
-  if (t) return t;
-  const output = Array.isArray(data?.output) ? data.output : [];
+function extractResponseText(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+
+  const dataObj = data as Record<string, unknown>;
+
+  // Try output_text field
+  const outputText = dataObj.output_text;
+  if (outputText && typeof outputText === "string") {
+    const t = outputText.trim();
+    if (t) return t;
+  }
+
+  // Try output array
+  const output = Array.isArray(dataObj.output) ? dataObj.output : [];
   const parts: string[] = [];
   for (const item of output) {
-    const content = Array.isArray(item?.content) ? item.content : [];
+    if (!item || typeof item !== "object") continue;
+    const itemObj = item as Record<string, unknown>;
+    const content = Array.isArray(itemObj.content) ? itemObj.content : [];
     for (const c of content) {
-      const txt = (c?.text || c?.content || "").toString();
-      if (txt) parts.push(txt);
+      if (!c || typeof c !== "object") continue;
+      const cObj = c as Record<string, unknown>;
+      const text = cObj.text || cObj.content;
+      if (text && typeof text === "string" && text.trim()) {
+        parts.push(text.trim());
+      }
     }
   }
   if (parts.length) return parts.join("\n").trim();
-  const choice = data?.choices?.[0]?.message?.content;
-  if (typeof choice === "string" && choice.trim()) return choice.trim();
+
+  // Try choices array (standard OpenAI format)
+  const choices = Array.isArray(dataObj.choices) ? dataObj.choices : [];
+  if (choices.length > 0 && choices[0] && typeof choices[0] === "object") {
+    const firstChoice = choices[0] as Record<string, unknown>;
+    const message = firstChoice.message;
+    if (message && typeof message === "object") {
+      const messageObj = message as Record<string, unknown>;
+      const content = messageObj.content;
+      if (typeof content === "string" && content.trim()) {
+        return content.trim();
+      }
+    }
+  }
+
   return null;
 }
 
@@ -124,7 +153,11 @@ async function generatePrepChecklist(topic: string): Promise<string> {
       return text || `Could not generate checklist for: ${topic}`;
     } else {
       // Chat Completions for non-o4 models (include temperature only if not o4)
-      const payload: any = {
+      const payload: {
+        model: string;
+        messages: Array<{ role: string; content: string }>;
+        temperature?: number;
+      } = {
         model: OPENAI_MODEL,
         messages: [
           {

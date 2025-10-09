@@ -2,9 +2,6 @@ import { supabase } from "./supabase";
 import type { Database } from "./supabase";
 
 type User = Database["users"]["Row"];
-type Conversation = Database["conversations"]["Insert"];
-type Checklist = Database["checklists"]["Insert"];
-type SubmittedLink = Database["submitted_links"]["Insert"];
 
 /**
  * Get or create a user by their Telegram ID
