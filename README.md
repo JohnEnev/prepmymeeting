@@ -19,7 +19,11 @@ APP_BASE_URL=https://YOUR_DOMAIN # Vercel production
 TELEGRAM_BOT_TOKEN=123456:ABC...  # from @BotFather
 TELEGRAM_WEBHOOK_SECRET=your-random-secret
 OPENAI_API_KEY=sk-...             # optional locally; required for AI checklists
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 ```
+
+See `supabase/README.md` for detailed Supabase setup instructions.
 
 ## Telegram bot setup
 

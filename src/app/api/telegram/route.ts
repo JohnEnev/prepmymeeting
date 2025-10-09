@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getOrCreateUser, logConversation, saveChecklist } from "@/lib/db";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -179,9 +180,26 @@ export async function POST(req: NextRequest) {
     const message = update?.message;
     const chatId: number | undefined = message?.chat?.id;
     const text: string | undefined = message?.text;
+    const from = message?.from;
 
     if (!chatId) {
       return NextResponse.json({ ok: true });
+    }
+
+    // Get or create user in database
+    let user = null;
+    if (from) {
+      user = await getOrCreateUser({
+        id: from.id,
+        username: from.username,
+        first_name: from.first_name,
+        last_name: from.last_name,
+      });
+    }
+
+    // Log user message if we have text
+    if (text && user) {
+      await logConversation(user.id, text, "user");
     }
 
     const command = parseCommand(text);
@@ -189,45 +207,70 @@ export async function POST(req: NextRequest) {
     if (command) {
       switch (command.cmd) {
         case "/start": {
-          await sendTelegramMessage(
-            chatId,
-            "Welcome to PrepMyMeeting!\n\nCommands:\n/help – show help\n/prep <topic> – e.g., doctor, contractor, interview\n/agenda – build an agenda from your topic"
-          );
+          const welcomeMsg = "Welcome to PrepMyMeeting!\n\nCommands:\n/help – show help\n/prep <topic> – e.g., doctor, contractor, interview\n/agenda – build an agenda from your topic";
+          await sendTelegramMessage(chatId, welcomeMsg);
+          if (user) {
+            await logConversation(user.id, welcomeMsg, "bot");
+          }
           return NextResponse.json({ ok: true });
         }
         case "/help": {
-          await sendTelegramMessage(
-            chatId,
-            "Use /prep <topic> to get tailored question checklists. Examples:\n/prep doctor\n/prep contractor\n/prep interview\n\nYou can also paste a link (job post, listing, profile) – support coming soon."
-          );
+          const helpMsg = "Use /prep <topic> to get tailored question checklists. Examples:\n/prep doctor\n/prep contractor\n/prep interview\n\nYou can also paste a link (job post, listing, profile) – support coming soon.";
+          await sendTelegramMessage(chatId, helpMsg);
+          if (user) {
+            await logConversation(user.id, helpMsg, "bot");
+          }
           return NextResponse.json({ ok: true });
         }
         case "/prep": {
           const topic = command.args?.trim();
           if (!topic) {
-            await sendTelegramMessage(chatId, "Please provide a topic. Example: /prep doctor");
+            const errorMsg = "Please provide a topic. Example: /prep doctor";
+            await sendTelegramMessage(chatId, errorMsg);
+            if (user) {
+              await logConversation(user.id, errorMsg, "bot");
+            }
             return NextResponse.json({ ok: true });
           }
           const checklist = await generatePrepChecklist(topic);
           const parts = chunkForTelegram(checklist);
           for (const part of parts) {
             await sendTelegramMessage(chatId, part);
+            if (user) {
+              await logConversation(user.id, part, "bot");
+            }
+          }
+          // Save the full checklist to database
+          if (user) {
+            await saveChecklist(user.id, topic, checklist);
           }
           return NextResponse.json({ ok: true });
         }
         case "/agenda": {
-          await sendTelegramMessage(chatId, "(Agenda builder coming soon – will suggest structure and notes.)");
+          const agendaMsg = "(Agenda builder coming soon – will suggest structure and notes.)";
+          await sendTelegramMessage(chatId, agendaMsg);
+          if (user) {
+            await logConversation(user.id, agendaMsg, "bot");
+          }
           return NextResponse.json({ ok: true });
         }
         default: {
-          await sendTelegramMessage(chatId, "Unknown command. Try /help");
+          const unknownMsg = "Unknown command. Try /help";
+          await sendTelegramMessage(chatId, unknownMsg);
+          if (user) {
+            await logConversation(user.id, unknownMsg, "bot");
+          }
           return NextResponse.json({ ok: true });
         }
       }
     }
 
     if (text) {
-      await sendTelegramMessage(chatId, `You said: ${text}\n\n(LLM replies coming soon 🚧)`);
+      const echoMsg = `You said: ${text}\n\n(LLM replies coming soon 🚧)`;
+      await sendTelegramMessage(chatId, echoMsg);
+      if (user) {
+        await logConversation(user.id, echoMsg, "bot");
+      }
       return NextResponse.json({ ok: true });
     }
 
