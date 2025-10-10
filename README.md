@@ -34,6 +34,7 @@ OPENAI_MODEL=o4-mini              # optional, defaults to o4-mini
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key  # Recommended for bot operations
 ```
 
 See `supabase/README.md` for detailed Supabase setup instructions.
