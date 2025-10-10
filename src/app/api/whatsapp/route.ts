@@ -6,7 +6,8 @@ import {
   extractMessageText,
   markMessageAsRead,
 } from "@/lib/whatsapp";
-import { getOrCreateUser, logConversation, saveChecklist } from "@/lib/db";
+import { getOrCreateUser, logConversation, saveChecklist, getRecentConversations } from "@/lib/db";
+import { classifyIntent, buildPrepTopic, quickClassify } from "@/lib/nlp";
 
 const WHATSAPP_WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -332,9 +333,76 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // For now, don't respond to non-command text
-    // Just log it and wait for natural language processing feature
-    // TODO: Add NLP to handle natural language requests
+    // Handle natural language using NLP
+    if (text) {
+      // Quick check if message is likely about prep
+      const quickCheck = quickClassify(text);
+
+      // Only classify with OpenAI if it seems like a prep request
+      if (quickCheck.likelyPrep) {
+        // Get recent conversation history for context
+        const recentMessages = user
+          ? await getRecentConversations(user.id, 10)
+          : [];
+        const conversationHistory = recentMessages
+          .slice(0, 5) // Last 5 messages
+          .reverse()
+          .map((msg) => `${msg.message_type}: ${msg.message_text}`);
+
+        const nlpResult = await classifyIntent(text, conversationHistory);
+
+        console.log("NLP Result:", nlpResult);
+
+        // Handle based on intent
+        if (nlpResult.intent === "prep_meeting" && nlpResult.confidence > 0.6) {
+          const topic = buildPrepTopic(nlpResult);
+          const checklist = await generatePrepChecklist(topic);
+          const chunks = chunkWhatsAppMessage(checklist);
+
+          for (const chunk of chunks) {
+            await sendWhatsAppMessage(from, chunk);
+            if (user) {
+              await logConversation(user.id, chunk, "bot");
+            }
+          }
+
+          // Save checklist to database
+          if (user) {
+            await saveChecklist(user.id, topic, checklist);
+          }
+
+          return NextResponse.json({ status: "ok" });
+        } else if (nlpResult.intent === "help") {
+          const helpMsg =
+            "I'm here to help you prepare for meetings! 🎯\n\nYou can:\n• Tell me about your upcoming meeting (e.g., \"I have a doctor appointment\")\n• Use /prep <topic> for quick checklists\n• Use /help to see all commands\n\nWhat would you like help with?";
+          await sendWhatsAppMessage(from, helpMsg);
+          if (user) {
+            await logConversation(user.id, helpMsg, "bot");
+          }
+          return NextResponse.json({ status: "ok" });
+        } else if (nlpResult.intent === "feedback") {
+          const feedbackMsg =
+            "I'd love to help refine that! However, I need to remember our previous conversation better. This feature is coming soon! 🚧\n\nFor now, you can ask me to prepare for a new meeting.";
+          await sendWhatsAppMessage(from, feedbackMsg);
+          if (user) {
+            await logConversation(user.id, feedbackMsg, "bot");
+          }
+          return NextResponse.json({ status: "ok" });
+        } else if (nlpResult.confidence < 0.6) {
+          // Low confidence - ask for clarification
+          const clarifyMsg =
+            "I'm not quite sure what you need help with. Could you rephrase?\n\nFor example:\n• \"I have a doctor appointment tomorrow\"\n• \"/prep contractor\"\n• \"/help\" for more options";
+          await sendWhatsAppMessage(from, clarifyMsg);
+          if (user) {
+            await logConversation(user.id, clarifyMsg, "bot");
+          }
+          return NextResponse.json({ status: "ok" });
+        }
+      }
+
+      // If we get here, it's not a prep request - don't respond
+      // (already logged in database for analytics)
+    }
 
     return NextResponse.json({ status: "ok" });
   } catch (error: unknown) {
