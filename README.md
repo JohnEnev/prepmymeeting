@@ -26,6 +26,7 @@ TELEGRAM_WEBHOOK_SECRET=your-random-secret
 WHATSAPP_PHONE_NUMBER_ID=your-phone-number-id
 WHATSAPP_ACCESS_TOKEN=your-access-token
 WHATSAPP_WEBHOOK_VERIFY_TOKEN=your-verify-token
+NEXT_PUBLIC_WHATSAPP_NUMBER=15551234567  # Your WhatsApp number for wa.me link (without +)
 
 # OpenAI
 OPENAI_API_KEY=sk-...             # optional locally; required for AI checklists

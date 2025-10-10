@@ -13,7 +13,7 @@ export default function Home() {
         Get ready for any meeting with tailored question checklists, voice chat, and calendar context.
       </p>
 
-      <div style={{ marginTop: 32 }}>
+      <div style={{ marginTop: 32, display: "flex", gap: 16, flexWrap: "wrap" }}>
         <Link href="https://t.me/prepmymeeting_bot" target="_blank" style={{
           display: "inline-block",
           background: "#229ED9",
@@ -25,10 +25,22 @@ export default function Home() {
         }}>
           Open Telegram Bot
         </Link>
+
+        <Link href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || ""}`} target="_blank" style={{
+          display: "inline-block",
+          background: "#25D366",
+          color: "#fff",
+          padding: "12px 18px",
+          borderRadius: 8,
+          textDecoration: "none",
+          fontWeight: 600
+        }}>
+          Open WhatsApp Bot
+        </Link>
       </div>
 
       <div style={{ marginTop: 24, color: "#888" }}>
-        <p style={{ margin: 0 }}>Don’t have Telegram yet? Install it and return to this link.</p>
+        <p style={{ margin: 0 }}>Choose your preferred platform - both bots have the same features!</p>
       </div>
 
       <section style={{ marginTop: 48 }}>
