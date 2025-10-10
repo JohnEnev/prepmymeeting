@@ -110,10 +110,12 @@ async function generatePrepChecklist(topic: string): Promise<string> {
   try {
     if (isO4Family) {
       const prompt = [
-        "You generate concise, practical meeting preparation checklists.",
-        "Use short bullets, grouped by 2-3 sections with headings.",
-        "Focus on questions to ask and items to bring.",
-        "Limit total to ~20 bullets.",
+        "You're a helpful friend giving quick, practical advice for meeting prep.",
+        "Be conversational and warm. Start with a friendly intro like 'Of course! Here's what I'd ask...' or 'Sure thing! Here are the key things...'",
+        "Use plain text with simple bullets (•) - NO markdown headers or formatting.",
+        "Keep it SHORT - max 8-10 bullets total.",
+        "Focus on the most important questions and 2-3 things to bring.",
+        "Sound natural, like texting a friend.",
         "",
         `Topic: ${topic}`,
       ].join("\n");
@@ -151,7 +153,7 @@ async function generatePrepChecklist(topic: string): Promise<string> {
           {
             role: "system",
             content:
-              "You generate concise, practical meeting preparation checklists. Use short bullets, grouped by 2-3 sections with headings. Focus on questions to ask and items to bring. Limit total to ~20 bullets.",
+              "You're a helpful friend giving quick, practical advice for meeting prep. Be conversational and warm. Start with a friendly intro like 'Of course! Here's what I'd ask...' or 'Sure thing! Here are the key things...'. Use plain text with simple bullets (•) - NO markdown headers or formatting. Keep it SHORT - max 8-10 bullets total. Focus on the most important questions and 2-3 things to bring. Sound natural, like texting a friend.",
           },
           { role: "user", content: `Topic: ${topic}` },
         ],
