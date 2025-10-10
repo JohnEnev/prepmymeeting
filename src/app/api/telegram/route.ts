@@ -42,6 +42,23 @@ function parseCommand(text: string | undefined) {
   return { cmd: cmdOnly.toLowerCase(), args } as const;
 }
 
+/**
+ * Detect if text is a greeting
+ */
+function isGreeting(text: string | undefined): boolean {
+  if (!text) return false;
+  const normalized = text.toLowerCase().trim();
+  const greetings = [
+    "hi", "hello", "hey", "hiya", "howdy", "greetings",
+    "good morning", "good afternoon", "good evening",
+    "what's up", "whats up", "sup", "yo"
+  ];
+
+  // Check if the message is just a greeting (with optional punctuation)
+  const cleanText = normalized.replace(/[.,!?]+$/, '');
+  return greetings.includes(cleanText) || greetings.some(g => cleanText === g);
+}
+
 function chunkForTelegram(text: string, max = 3500): string[] {
   if (text.length <= max) return [text];
   const paragraphs = text.split(/\n\n+/);
@@ -235,6 +252,16 @@ export async function POST(req: NextRequest) {
       await logConversation(user.id, text, "user");
     }
 
+    // Check for greetings first
+    if (text && isGreeting(text)) {
+      const greetingMsg = "Hi there! 👋 I'm here to help you prepare for your meetings and appointments.\n\nWhat's coming up for you? Tell me about your next meeting, or use these commands:\n\n• /prep <topic> - Get a prep checklist (e.g., \"/prep doctor\")\n• /help - See all commands\n\nOr just tell me naturally, like \"I have a contractor meeting tomorrow\"!";
+      await sendTelegramMessage(chatId, greetingMsg);
+      if (user) {
+        await logConversation(user.id, greetingMsg, "bot");
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     const command = parseCommand(text);
 
     if (command) {
@@ -298,14 +325,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (text) {
-      const echoMsg = `You said: ${text}\n\n(LLM replies coming soon 🚧)`;
-      await sendTelegramMessage(chatId, echoMsg);
-      if (user) {
-        await logConversation(user.id, echoMsg, "bot");
-      }
-      return NextResponse.json({ ok: true });
-    }
+    // For now, don't respond to non-command text
+    // Just log it and wait for natural language processing feature
+    // TODO: Add NLP to handle natural language requests
 
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
