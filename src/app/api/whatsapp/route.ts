@@ -211,10 +211,14 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
+    console.log("WhatsApp webhook received");
     const body = await req.json();
+    console.log("WhatsApp webhook body:", JSON.stringify(body, null, 2));
+
     const parsed = parseWhatsAppWebhook(body);
 
     if (!parsed || parsed.messages.length === 0) {
+      console.log("No messages in webhook");
       return NextResponse.json({ status: "ok" });
     }
 
@@ -226,6 +230,9 @@ export async function POST(req: NextRequest) {
     const from = message.from;
     const messageId = message.id;
     const text = extractMessageText(message);
+
+    console.log("Extracted text:", text);
+    console.log("Message type:", message.type);
 
     // Mark message as read
     await markMessageAsRead(messageId);
@@ -335,11 +342,14 @@ export async function POST(req: NextRequest) {
 
     // Handle natural language using NLP
     if (text) {
+      console.log("Handling NLP for text:", text);
       // Quick check if message is likely about prep
       const quickCheck = quickClassify(text);
+      console.log("Quick classify result:", quickCheck);
 
       // Only classify with OpenAI if it seems like a prep request
       if (quickCheck.likelyPrep) {
+        console.log("Text classified as likely prep, calling OpenAI...");
         // Get recent conversation history for context
         const recentMessages = user
           ? await getRecentConversations(user.id, 10)
@@ -402,8 +412,12 @@ export async function POST(req: NextRequest) {
 
       // If we get here, it's not a prep request - don't respond
       // (already logged in database for analytics)
+      console.log("Message not classified as prep request, no response sent");
+    } else {
+      console.log("No text extracted from message");
     }
 
+    console.log("Webhook processing complete");
     return NextResponse.json({ status: "ok" });
   } catch (error: unknown) {
     console.error("WhatsApp webhook error:", error);
