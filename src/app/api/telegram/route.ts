@@ -395,8 +395,13 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // If we get here, it's not a prep request - don't respond
-      // (already logged in database for analytics)
+      // If we get here, it's not a prep request - send a friendly fallback
+      const fallbackMsg =
+        "Hi! I'm here to help you prepare for meetings and appointments.\n\nTry telling me about your next meeting, like:\n• \"I have a dentist appointment tomorrow\"\n• \"Meeting a contractor for my kitchen\"\n\nOr use /help to see all options!";
+      await sendTelegramMessage(chatId, fallbackMsg);
+      if (user) {
+        await logConversation(user.id, fallbackMsg, "bot");
+      }
     }
 
     return NextResponse.json({ ok: true });

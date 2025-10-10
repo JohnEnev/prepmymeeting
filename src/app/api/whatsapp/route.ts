@@ -412,9 +412,14 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // If we get here, it's not a prep request - don't respond
-      // (already logged in database for analytics)
-      console.log("Message not classified as prep request, no response sent");
+      // If we get here, it's not a prep request - send a friendly fallback
+      console.log("Message not classified as prep request, sending fallback");
+      const fallbackMsg =
+        "Hi! I'm here to help you prepare for meetings and appointments.\n\nTry telling me about your next meeting, like:\n• \"I have a dentist appointment tomorrow\"\n• \"Meeting a contractor for my kitchen\"\n\nOr use /help to see all options!";
+      await sendWhatsAppMessage(from, fallbackMsg);
+      if (user) {
+        await logConversation(user.id, fallbackMsg, "bot");
+      }
     } else {
       console.log("No text extracted from message");
     }
