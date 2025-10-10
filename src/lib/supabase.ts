@@ -10,7 +10,9 @@ export type Database = {
   users: {
     Row: {
       id: string;
-      telegram_id: number;
+      telegram_id: number | null;
+      whatsapp_id: string | null;
+      platform: "telegram" | "whatsapp";
       username: string | null;
       first_name: string | null;
       last_name: string | null;
@@ -19,7 +21,9 @@ export type Database = {
     };
     Insert: {
       id?: string;
-      telegram_id: number;
+      telegram_id?: number | null;
+      whatsapp_id?: string | null;
+      platform?: "telegram" | "whatsapp";
       username?: string | null;
       first_name?: string | null;
       last_name?: string | null;
@@ -28,7 +32,9 @@ export type Database = {
     };
     Update: {
       id?: string;
-      telegram_id?: number;
+      telegram_id?: number | null;
+      whatsapp_id?: string | null;
+      platform?: "telegram" | "whatsapp";
       username?: string | null;
       first_name?: string | null;
       last_name?: string | null;

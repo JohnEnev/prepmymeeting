@@ -4,38 +4,64 @@ import type { Database } from "./supabase";
 type User = Database["users"]["Row"];
 
 /**
- * Get or create a user by their Telegram ID
+ * Get or create a user by their platform ID (Telegram or WhatsApp)
  */
-export async function getOrCreateUser(telegramUser: {
-  id: number;
+export async function getOrCreateUser(user: {
+  id?: number; // Telegram ID
+  whatsappId?: string; // WhatsApp ID
   username?: string;
   first_name?: string;
+  firstName?: string;
   last_name?: string;
+  lastName?: string;
+  platform?: "telegram" | "whatsapp";
 }): Promise<User | null> {
   try {
-    // Try to find existing user
-    const { data: existingUser, error: fetchError } = await supabase
-      .from("users")
-      .select("*")
-      .eq("telegram_id", telegramUser.id)
-      .single();
+    const platform = user.platform || "telegram";
+    const firstName = user.first_name || user.firstName;
+    const lastName = user.last_name || user.lastName;
 
-    if (existingUser && !fetchError) {
+    // Try to find existing user
+    let existingUser: User | null = null;
+
+    if (platform === "telegram" && user.id) {
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("telegram_id", user.id)
+        .single();
+
+      if (!error && data) {
+        existingUser = data;
+      }
+    } else if (platform === "whatsapp" && user.whatsappId) {
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("whatsapp_id", user.whatsappId)
+        .single();
+
+      if (!error && data) {
+        existingUser = data;
+      }
+    }
+
+    if (existingUser) {
       // Update user info if it changed
       const needsUpdate =
-        existingUser.username !== telegramUser.username ||
-        existingUser.first_name !== telegramUser.first_name ||
-        existingUser.last_name !== telegramUser.last_name;
+        existingUser.username !== user.username ||
+        existingUser.first_name !== firstName ||
+        existingUser.last_name !== lastName;
 
       if (needsUpdate) {
         const { data: updatedUser } = await supabase
           .from("users")
           .update({
-            username: telegramUser.username,
-            first_name: telegramUser.first_name,
-            last_name: telegramUser.last_name,
+            username: user.username,
+            first_name: firstName,
+            last_name: lastName,
           })
-          .eq("telegram_id", telegramUser.id)
+          .eq("id", existingUser.id)
           .select()
           .single();
 
@@ -46,14 +72,22 @@ export async function getOrCreateUser(telegramUser: {
     }
 
     // Create new user
+    const insertData: Record<string, unknown> = {
+      username: user.username,
+      first_name: firstName,
+      last_name: lastName,
+      platform,
+    };
+
+    if (platform === "telegram" && user.id) {
+      insertData.telegram_id = user.id;
+    } else if (platform === "whatsapp" && user.whatsappId) {
+      insertData.whatsapp_id = user.whatsappId;
+    }
+
     const { data: newUser, error: createError } = await supabase
       .from("users")
-      .insert({
-        telegram_id: telegramUser.id,
-        username: telegramUser.username,
-        first_name: telegramUser.first_name,
-        last_name: telegramUser.last_name,
-      })
+      .insert(insertData)
       .select()
       .single();
 
