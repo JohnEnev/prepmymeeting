@@ -127,7 +127,9 @@ export interface WhatsAppMessage {
   from: string;
   id: string;
   timestamp: string;
-  text?: string;
+  text?: {
+    body: string;
+  };
   type: "text" | "image" | "video" | "audio" | "document" | "location";
 }
 
@@ -179,8 +181,8 @@ export function parseWhatsAppWebhook(body: unknown): {
  * Extract text from WhatsApp message
  */
 export function extractMessageText(message: WhatsAppMessage): string | null {
-  if (message.type === "text" && message.text) {
-    return message.text;
+  if (message.type === "text" && message.text && message.text.body) {
+    return message.text.body;
   }
   return null;
 }
