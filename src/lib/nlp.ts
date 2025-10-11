@@ -9,7 +9,10 @@ export type Intent =
   | "prep_meeting" // User wants to prepare for a meeting
   | "greeting" // User is greeting the bot
   | "help" // User needs help
-  | "feedback" // User wants to refine previous response
+  | "follow_up" // User asking about previous response
+  | "refinement" // User wants to modify previous response (shorter, longer, etc.)
+  | "clarification" // User wants to explain/expand on previous response
+  | "feedback" // User wants to refine previous response (legacy)
   | "unclear"; // Intent cannot be determined
 
 export interface NLPResult {
@@ -41,11 +44,15 @@ export async function classifyIntent(
 
 Analyze the user's message and determine:
 1. Intent: What does the user want?
-   - "prep_meeting": User wants help preparing for a meeting/appointment
+   - "prep_meeting": User wants help preparing for a NEW meeting/appointment
    - "greeting": User is greeting the bot
    - "help": User needs assistance/instructions
-   - "feedback": User wants to modify/refine previous response (e.g., "make it shorter", "more formal")
+   - "follow_up": User asking a follow-up question about previous response (e.g., "what about X?", "tell me more")
+   - "refinement": User wants to MODIFY previous response (e.g., "make it shorter", "more formal", "less detailed")
+   - "clarification": User wants MORE INFO or EXPLANATION about previous response (e.g., "explain the second point", "why")
    - "unclear": Cannot determine intent
+
+IMPORTANT: Use context from conversation history to distinguish between new prep requests and follow-ups!
 
 2. Meeting Type (if intent is "prep_meeting"): Extract the type of meeting
    - Examples: "doctor", "dentist", "contractor", "interview", "lawyer", "real estate agent", "restaurant", etc.
@@ -58,7 +65,7 @@ Analyze the user's message and determine:
 
 Respond ONLY with a valid JSON object in this exact format:
 {
-  "intent": "prep_meeting" | "greeting" | "help" | "feedback" | "unclear",
+  "intent": "prep_meeting" | "greeting" | "help" | "follow_up" | "refinement" | "clarification" | "unclear",
   "meetingType": "string or null",
   "context": "string or null",
   "confidence": 0.95

@@ -243,3 +243,119 @@ export async function getRecentConversations(
     return [];
   }
 }
+
+/**
+ * Get or create active session for user
+ * Sessions expire after 10 minutes of inactivity
+ */
+export async function getOrCreateSession(
+  userId: string,
+  topic?: string
+): Promise<Database["conversation_sessions"]["Row"] | null> {
+  try {
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+    // Try to find an active session that's not expired
+    const { data: existingSession, error: fetchError } = await supabase
+      .from("conversation_sessions")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .gt("last_activity_at", tenMinutesAgo)
+      .order("last_activity_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!fetchError && existingSession) {
+      // Update activity timestamp
+      await updateSessionActivity(existingSession.id);
+      return existingSession;
+    }
+
+    // Create new session
+    const { data: newSession, error: createError } = await supabase
+      .from("conversation_sessions")
+      .insert({
+        user_id: userId,
+        topic: topic || null,
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      console.error("Error creating session:", createError);
+      return null;
+    }
+
+    return newSession;
+  } catch (error) {
+    console.error("Error in getOrCreateSession:", error);
+    return null;
+  }
+}
+
+/**
+ * Update session activity timestamp
+ */
+export async function updateSessionActivity(sessionId: string): Promise<void> {
+  try {
+    await supabase
+      .from("conversation_sessions")
+      .update({
+        last_activity_at: new Date().toISOString(),
+      })
+      .eq("id", sessionId);
+  } catch (error) {
+    console.error("Error updating session activity:", error);
+  }
+}
+
+/**
+ * Deactivate old sessions (>10 min inactive)
+ */
+export async function deactivateOldSessions(userId: string): Promise<void> {
+  try {
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+    await supabase
+      .from("conversation_sessions")
+      .update({
+        is_active: false,
+      })
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .lt("last_activity_at", tenMinutesAgo);
+  } catch (error) {
+    console.error("Error deactivating old sessions:", error);
+  }
+}
+
+/**
+ * Log a conversation message with session tracking
+ */
+export async function logConversationWithSession(
+  userId: string,
+  messageText: string,
+  messageType: "user" | "bot",
+  sessionId?: string
+): Promise<boolean> {
+  try {
+    const { error } = await supabase.from("conversations").insert({
+      user_id: userId,
+      message_text: messageText,
+      message_type: messageType,
+      session_id: sessionId || null,
+    });
+
+    if (error) {
+      console.error("Error logging conversation:", error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in logConversationWithSession:", error);
+    return false;
+  }
+}

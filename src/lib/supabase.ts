@@ -58,6 +58,7 @@ export type Database = {
     Row: {
       id: string;
       user_id: string;
+      session_id: string | null;
       message_text: string;
       message_type: "user" | "bot";
       created_at: string;
@@ -65,6 +66,7 @@ export type Database = {
     Insert: {
       id?: string;
       user_id: string;
+      session_id?: string | null;
       message_text: string;
       message_type: "user" | "bot";
       created_at?: string;
@@ -72,9 +74,36 @@ export type Database = {
     Update: {
       id?: string;
       user_id?: string;
+      session_id?: string | null;
       message_text?: string;
       message_type?: "user" | "bot";
       created_at?: string;
+    };
+  };
+  conversation_sessions: {
+    Row: {
+      id: string;
+      user_id: string;
+      topic: string | null;
+      last_activity_at: string;
+      created_at: string;
+      is_active: boolean;
+    };
+    Insert: {
+      id?: string;
+      user_id: string;
+      topic?: string | null;
+      last_activity_at?: string;
+      created_at?: string;
+      is_active?: boolean;
+    };
+    Update: {
+      id?: string;
+      user_id?: string;
+      topic?: string | null;
+      last_activity_at?: string;
+      created_at?: string;
+      is_active?: boolean;
     };
   };
   checklists: {

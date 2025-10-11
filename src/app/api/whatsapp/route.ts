@@ -6,9 +6,25 @@ import {
   extractMessageText,
   markMessageAsRead,
 } from "@/lib/whatsapp";
-import { getOrCreateUser, logConversation, saveChecklist, getRecentConversations, saveSubmittedLink } from "@/lib/db";
+import {
+  getOrCreateUser,
+  logConversation,
+  saveChecklist,
+  getRecentConversations,
+  saveSubmittedLink,
+  getOrCreateSession,
+  updateSessionActivity,
+  deactivateOldSessions,
+  logConversationWithSession,
+} from "@/lib/db";
 import { classifyIntent, buildPrepTopic, quickClassify } from "@/lib/nlp";
 import { extractURLs, parseURL, buildURLContext } from "@/lib/url-parser";
+import {
+  isLikelyFollowUp,
+  buildConversationContext,
+  truncateContext,
+} from "@/lib/conversation-context";
+import { generateFollowUpResponse, shouldUsePrepFlow } from "@/lib/follow-up";
 
 const WHATSAPP_WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -262,9 +278,19 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Log user message
-    if (text && user) {
-      await logConversation(user.id, text, "user");
+    // Session management and logging
+    let session = null;
+    if (user) {
+      // Deactivate old sessions (>10 min)
+      await deactivateOldSessions(user.id);
+
+      // Get or create active session
+      session = await getOrCreateSession(user.id);
+
+      // Log user message with session
+      if (text) {
+        await logConversationWithSession(user.id, text, "user", session?.id);
+      }
     }
 
     // Check for greetings first
@@ -444,6 +470,64 @@ export async function POST(req: NextRequest) {
           }
           return NextResponse.json({ status: "ok" });
         }
+      }
+    }
+
+    // Check for follow-up questions (conversational memory)
+    if (text && user && session && isLikelyFollowUp(text)) {
+      console.log("Detected potential follow-up question");
+
+      // Get recent conversation history for context
+      const recentMessages = await getRecentConversations(user.id, 10);
+
+      // Build context from recent messages
+      const conversationContext = buildConversationContext(recentMessages);
+
+      if (conversationContext) {
+        console.log("Have conversation context, classifying with OpenAI...");
+
+        // Classify intent with conversation context
+        const conversationHistory = recentMessages
+          .slice(0, 5)
+          .reverse()
+          .map((msg) => `${msg.message_type}: ${msg.message_text}`);
+
+        const nlpResult = await classifyIntent(text, conversationHistory);
+        console.log("Follow-up NLP result:", nlpResult);
+
+        // Check if this is actually a follow-up or a new prep request
+        const useFullPrep = shouldUsePrepFlow(text, nlpResult.intent);
+
+        if (!useFullPrep && (
+          nlpResult.intent === "follow_up" ||
+          nlpResult.intent === "refinement" ||
+          nlpResult.intent === "clarification"
+        ) && nlpResult.confidence > 0.6) {
+          // Generate follow-up response with context
+          const truncatedContext = truncateContext(conversationContext, 2000);
+          const followUpResponse = await generateFollowUpResponse(
+            text,
+            truncatedContext,
+            nlpResult.intent
+          );
+
+          // Send response
+          const chunks = chunkWhatsAppMessage(followUpResponse);
+          for (const chunk of chunks) {
+            await sendWhatsAppMessage(from, chunk);
+            if (user && session) {
+              await logConversationWithSession(user.id, chunk, "bot", session.id);
+            }
+          }
+
+          // Update session activity
+          if (session) {
+            await updateSessionActivity(session.id);
+          }
+
+          return NextResponse.json({ status: "ok" });
+        }
+        // If not a follow-up, fall through to normal NLP handling
       }
     }
 
