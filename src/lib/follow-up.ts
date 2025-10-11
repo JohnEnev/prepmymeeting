@@ -4,7 +4,7 @@
  */
 
 import type { Intent } from "./nlp";
-import { getRefinementType } from "./conversation-context";
+import { getRefinementType, extractFocusArea } from "./conversation-context";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
@@ -21,8 +21,9 @@ export async function generateFollowUpResponse(
   }
 
   try {
-    // Detect refinement type for more specific instructions
+    // Detect refinement type and focus area for more specific instructions
     const refinementType = getRefinementType(question);
+    const focusArea = extractFocusArea(question);
 
     let systemPrompt = `You're a helpful friend in an ongoing conversation about meeting preparation.
 
@@ -46,10 +47,23 @@ The user is now asking a follow-up question. Use the conversation history to pro
       } else {
         systemPrompt += `\n\nThe user wants to modify the previous response. Make the requested changes while keeping the same topic.`;
       }
+
+      // Add focus area if specified
+      if (focusArea) {
+        systemPrompt += `\n\nIMPORTANT: The user specifically wants to focus more on "${focusArea}". Adjust the response to emphasize this area with more questions and details about ${focusArea}.`;
+      }
     } else if (intent === "clarification") {
       systemPrompt += `\n\nThe user wants clarification or more information about a specific point from the previous response. Focus on that specific aspect.`;
+
+      if (focusArea) {
+        systemPrompt += `\n\nSpecifically, they're asking about "${focusArea}". Provide detailed information about ${focusArea}.`;
+      }
     } else if (intent === "follow_up") {
       systemPrompt += `\n\nThe user is asking a related follow-up question. Build on the previous conversation naturally.`;
+
+      if (focusArea) {
+        systemPrompt += `\n\nThey're particularly interested in "${focusArea}". Make sure to address this in your response.`;
+      }
     }
 
     systemPrompt += `\n\nImportant:
