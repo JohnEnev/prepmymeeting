@@ -35,11 +35,13 @@ export async function checkRateLimit(userId: string): Promise<RateLimitResult> {
     const now = new Date();
 
     // Get or create user usage record
-    let { data: usage, error } = await supabase
+    let usage;
+    const { data, error } = await supabase
       .from("user_usage")
       .select("*")
       .eq("user_id", userId)
       .single();
+    usage = data;
 
     if (error && error.code === "PGRST116") {
       // No record exists, create one
