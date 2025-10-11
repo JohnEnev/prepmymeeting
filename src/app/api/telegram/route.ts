@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrCreateUser, logConversation, saveChecklist, getRecentConversations } from "@/lib/db";
+import { getOrCreateUser, logConversation, saveChecklist, getRecentConversations, saveSubmittedLink } from "@/lib/db";
 import { classifyIntent, buildPrepTopic, quickClassify } from "@/lib/nlp";
+import { extractURLs, parseURL, buildURLContext } from "@/lib/url-parser";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -132,7 +133,7 @@ function extractResponseText(data: unknown): string | null {
   return null;
 }
 
-async function generatePrepChecklist(topic: string): Promise<string> {
+async function generatePrepChecklist(topic: string, urlContext?: string): Promise<string> {
   if (!OPENAI_API_KEY) {
     return `Prep checklist for: ${topic}\n\n- Goals and context\n- Key questions (3-5)\n- Constraints (time, budget, risks)\n- Next steps & follow-up\n\n(Add OPENAI_API_KEY to get detailed suggestions.)`;
   }
@@ -141,7 +142,7 @@ async function generatePrepChecklist(topic: string): Promise<string> {
   try {
     if (isO4Family) {
       // Use Responses API for o4/o4-mini with a single string input
-      const prompt = [
+      const promptParts = [
         "You're a helpful friend giving quick, practical advice for meeting prep.",
         "Be conversational and warm. Start with a friendly intro like 'Of course! Here's what I'd ask...' or 'Sure thing! Here are the key things...'",
         "Use plain text with simple bullets (•) - NO markdown headers or formatting.",
@@ -150,7 +151,13 @@ async function generatePrepChecklist(topic: string): Promise<string> {
         "Sound natural, like texting a friend.",
         "",
         `Topic: ${topic}`
-      ].join("\n");
+      ];
+
+      if (urlContext) {
+        promptParts.push("", "CONTEXT FROM URL:", urlContext);
+      }
+
+      const prompt = promptParts.join("\n");
       const res = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: {
@@ -173,6 +180,11 @@ async function generatePrepChecklist(topic: string): Promise<string> {
       return text || `Could not generate checklist for: ${topic}`;
     } else {
       // Chat Completions for non-o4 models (include temperature only if not o4)
+      let userContent = `Topic: ${topic}`;
+      if (urlContext) {
+        userContent += `\n\nCONTEXT FROM URL:\n${urlContext}`;
+      }
+
       const payload: {
         model: string;
         messages: Array<{ role: string; content: string }>;
@@ -183,9 +195,9 @@ async function generatePrepChecklist(topic: string): Promise<string> {
           {
             role: "system",
             content:
-              "You're a helpful friend giving quick, practical advice for meeting prep. Be conversational and warm. Start with a friendly intro like 'Of course! Here's what I'd ask...' or 'Sure thing! Here are the key things...'. Use plain text with simple bullets (•) - NO markdown headers or formatting. Keep it SHORT - max 8-10 bullets total. Focus on the most important questions and 2-3 things to bring. Sound natural, like texting a friend.",
+              "You're a helpful friend giving quick, practical advice for meeting prep. Be conversational and warm. Start with a friendly intro like 'Of course! Here's what I'd ask...' or 'Sure thing! Here are the key things...'. Use plain text with simple bullets (•) - NO markdown headers or formatting. Keep it SHORT - max 8-10 bullets total. Focus on the most important questions and 2-3 things to bring. Sound natural, like texting a friend. If context from a URL is provided, use it to tailor your advice.",
           },
-          { role: "user", content: `Topic: ${topic}` },
+          { role: "user", content: userContent },
         ],
       };
       if (!OPENAI_MODEL.toLowerCase().startsWith("o4")) {
@@ -322,6 +334,99 @@ export async function POST(req: NextRequest) {
           await sendTelegramMessage(chatId, unknownMsg);
           if (user) {
             await logConversation(user.id, unknownMsg, "bot");
+          }
+          return NextResponse.json({ ok: true });
+        }
+      }
+    }
+
+    // Check for URLs in message
+    if (text) {
+      const urls = extractURLs(text);
+      if (urls.length > 0) {
+        console.log("URLs detected:", urls);
+        const url = urls[0]; // Handle first URL for now
+
+        // Send acknowledgment
+        const ackMsg = "I see you shared a link! Let me fetch that info for you...";
+        await sendTelegramMessage(chatId, ackMsg);
+        if (user) {
+          await logConversation(user.id, ackMsg, "bot");
+        }
+
+        // Parse URL
+        const urlInfo = await parseURL(url);
+        console.log("Parsed URL info:", urlInfo);
+
+        if (urlInfo.content) {
+          // Determine topic based on URL type and text
+          let topic = "general meeting";
+          if (text.toLowerCase().includes("interview") || urlInfo.type === "job_posting") {
+            topic = "job interview";
+          } else if (urlInfo.type === "linkedin_profile") {
+            topic = "networking meeting";
+          } else if (urlInfo.type === "property_listing") {
+            topic = "property viewing";
+          } else if (urlInfo.type === "restaurant") {
+            topic = "restaurant visit";
+          } else if (urlInfo.type === "business_website") {
+            topic = "business meeting";
+          }
+
+          // Add any additional context from the message
+          const textWithoutUrl = text.replace(url, "").trim();
+          if (textWithoutUrl) {
+            topic = textWithoutUrl;
+          }
+
+          // Build context from URL
+          const urlContext = buildURLContext(urlInfo);
+
+          // Generate checklist with URL context
+          const checklist = await generatePrepChecklist(topic, urlContext);
+          const parts = chunkForTelegram(checklist);
+
+          for (const part of parts) {
+            await sendTelegramMessage(chatId, part);
+            if (user) {
+              await logConversation(user.id, part, "bot");
+            }
+          }
+
+          // Save checklist and link to database
+          if (user) {
+            await saveChecklist(user.id, topic, checklist);
+
+            // Map URLType to database link_type
+            let linkType: "linkedin" | "property" | "restaurant" | "job_post" | "other" = "other";
+            if (urlInfo.type === "linkedin_profile" || urlInfo.type === "linkedin_company") {
+              linkType = "linkedin";
+            } else if (urlInfo.type === "job_posting") {
+              linkType = "job_post";
+            } else if (urlInfo.type === "property_listing") {
+              linkType = "property";
+            } else if (urlInfo.type === "restaurant") {
+              linkType = "restaurant";
+            }
+
+            await saveSubmittedLink(
+              user.id,
+              url,
+              linkType,
+              urlInfo.title,
+              urlInfo.content,
+              { type: urlInfo.type, summary: urlInfo.summary }
+            );
+          }
+
+          return NextResponse.json({ ok: true });
+        } else {
+          // Failed to fetch URL content
+          const errorMsg =
+            "Sorry, I couldn't access that link. It might be blocked or require login. Try describing your meeting instead!";
+          await sendTelegramMessage(chatId, errorMsg);
+          if (user) {
+            await logConversation(user.id, errorMsg, "bot");
           }
           return NextResponse.json({ ok: true });
         }
