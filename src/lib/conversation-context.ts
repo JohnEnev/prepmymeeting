@@ -97,6 +97,52 @@ export function getRefinementType(text: string): string | null {
 }
 
 /**
+ * Extract focus area from message
+ * Returns specific topic/area user wants to focus on
+ */
+export function extractFocusArea(text: string): string | null {
+  const normalized = text.toLowerCase();
+
+  // Pattern: "more about X" or "focus on X" or "emphasize X"
+  const focusPatterns = [
+    /(?:more|focus|emphasize|concentrate|elaborate)\s+(?:on|about)\s+([a-z\s]+?)(?:\s|$|,|\.|!|\?)/i,
+    /(?:what about|tell me about)\s+([a-z\s]+?)(?:\s|$|,|\.|!|\?)/i,
+  ];
+
+  for (const pattern of focusPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const focus = match[1].trim();
+      // Filter out common words that aren't meaningful focus areas
+      const stopWords = ["the", "it", "that", "this", "them", "those", "these"];
+      if (!stopWords.includes(focus)) {
+        return focus;
+      }
+    }
+  }
+
+  // Check for specific keywords
+  const specificFocus = [
+    { pattern: /\b(budget|cost|price|money|expense)\b/i, area: "budget and costs" },
+    { pattern: /\b(timeline|schedule|time|deadline|duration)\b/i, area: "timeline and scheduling" },
+    { pattern: /\b(technical|technology|tech|system)\b/i, area: "technical details" },
+    { pattern: /\b(risk|concern|problem|issue|challenge)\b/i, area: "risks and concerns" },
+    { pattern: /\b(permit|regulation|legal|compliance|law)\b/i, area: "permits and regulations" },
+    { pattern: /\b(quality|standard|specification)\b/i, area: "quality standards" },
+    { pattern: /\b(experience|qualification|credential)\b/i, area: "experience and qualifications" },
+    { pattern: /\b(reference|review|feedback|testimonial)\b/i, area: "references and reviews" },
+  ];
+
+  for (const { pattern, area } of specificFocus) {
+    if (pattern.test(normalized)) {
+      return area;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Estimate token count for context (rough approximation)
  * Used for cost control
  */
