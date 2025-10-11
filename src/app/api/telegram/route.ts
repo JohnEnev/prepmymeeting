@@ -30,6 +30,12 @@ import {
   detectRecurringPattern,
   checkForRecurringMeeting,
 } from "@/lib/long-term-memory";
+import {
+  checkRateLimit,
+  incrementRequestCount,
+  trackCost,
+  COSTS,
+} from "@/lib/rate-limit";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -358,6 +364,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // CHECK RATE LIMITS - Do this after logging to track all requests
+    if (user && text) {
+      const rateLimitResult = await checkRateLimit(user.id);
+
+      if (!rateLimitResult.allowed) {
+        console.log(`Rate limit exceeded for user ${user.id}: ${rateLimitResult.limit}`);
+        await sendTelegramMessage(chatId, rateLimitResult.reason || "You've exceeded your usage limit. Please try again later.");
+        return NextResponse.json({ ok: true, rate_limited: true });
+      }
+
+      // Increment request count
+      await incrementRequestCount(user.id);
+    }
+
     // Check for greetings first
     if (text && isGreeting(text)) {
       const greetingMsg = "Hi there! 👋 I'm here to help you prepare for your meetings and appointments.\n\nWhat's coming up for you? Tell me about your next meeting, or use these commands:\n\n• /prep <topic> - Get a prep checklist (e.g., \"/prep doctor\")\n• /help - See all commands\n\nOr just tell me naturally, like \"I have a contractor meeting tomorrow\"!";
@@ -649,6 +669,12 @@ export async function POST(req: NextRequest) {
               max_bullets: userPrefs.max_bullets
             } : undefined
           );
+
+          // Track cost of OpenAI call
+          if (user) {
+            const isO4 = OPENAI_MODEL.toLowerCase().startsWith("o4");
+            await trackCost(user.id, isO4 ? COSTS.O4_MINI : COSTS.GPT4O_MINI);
+          }
 
           const parts = chunkForTelegram(checklist);
 
