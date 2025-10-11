@@ -42,12 +42,12 @@ export function isLikelyFollowUp(text: string): boolean {
   // Patterns that indicate follow-up questions
   const followUpPatterns = [
     // Refinement requests
-    /^(can you|could you|please)\s+(make|change|update|modify|adjust)/i,
+    /^(can you|could you|please)\s+(make|change|update|modify|adjust|get|give|show|tell|provide)/i,
     /\b(make it|change it|update it)\b/i,
     /\b(shorter|longer|more detailed|less detailed|simpler|more formal|less formal)\b/i,
 
     // Clarification requests
-    /\b(what about|how about|tell me more|explain|elaborate)\b/i,
+    /\b(what about|how about|tell me more|explain|elaborate|clarify)\b/i,
     /^(what|how|why|when|where)\b/i,
 
     // Pronouns referring to previous context
@@ -59,6 +59,13 @@ export function isLikelyFollowUp(text: string): boolean {
 
     // Direct modifications
     /\b(add|remove|include|exclude)\b.*\b(more|less|another)\b/i,
+
+    // References to previous messages/content
+    /\b(the (link|url|website|page|article|post|message))\b/i,
+    /\b(i (posted|shared|sent|mentioned|said))\b/i,
+    /\b(from (the|that|what|above))\b/i,
+    /\b(based on (the|that|what))\b/i,
+    /\b(you (said|mentioned|posted|shared))\b/i,
   ];
 
   return followUpPatterns.some(pattern => pattern.test(normalized));
