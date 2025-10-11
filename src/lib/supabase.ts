@@ -161,4 +161,121 @@ export type Database = {
       created_at?: string;
     };
   };
+  user_preferences: {
+    Row: {
+      id: string;
+      user_id: string;
+      preferred_length: "short" | "medium" | "long";
+      preferred_tone: "formal" | "casual" | "neutral";
+      max_bullets: number;
+      include_examples: boolean;
+      include_resources: boolean;
+      created_at: string;
+      updated_at: string;
+    };
+    Insert: {
+      id?: string;
+      user_id: string;
+      preferred_length?: "short" | "medium" | "long";
+      preferred_tone?: "formal" | "casual" | "neutral";
+      max_bullets?: number;
+      include_examples?: boolean;
+      include_resources?: boolean;
+      created_at?: string;
+      updated_at?: string;
+    };
+    Update: {
+      id?: string;
+      user_id?: string;
+      preferred_length?: "short" | "medium" | "long";
+      preferred_tone?: "formal" | "casual" | "neutral";
+      max_bullets?: number;
+      include_examples?: boolean;
+      include_resources?: boolean;
+      created_at?: string;
+      updated_at?: string;
+    };
+  };
+  conversation_summaries: {
+    Row: {
+      id: string;
+      user_id: string;
+      session_id: string | null;
+      topic: string;
+      summary: string;
+      key_points: string[];
+      message_count: number;
+      start_date: string;
+      end_date: string;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      user_id: string;
+      session_id?: string | null;
+      topic: string;
+      summary: string;
+      key_points?: string[];
+      message_count?: number;
+      start_date: string;
+      end_date: string;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      user_id?: string;
+      session_id?: string | null;
+      topic?: string;
+      summary?: string;
+      key_points?: string[];
+      message_count?: number;
+      start_date?: string;
+      end_date?: string;
+      created_at?: string;
+    };
+  };
+  recurring_meetings: {
+    Row: {
+      id: string;
+      user_id: string;
+      meeting_type: string;
+      normalized_name: string;
+      frequency: string | null;
+      first_occurrence: string;
+      last_occurrence: string;
+      occurrence_count: number;
+      last_checklist_id: string | null;
+      last_summary: string | null;
+      created_at: string;
+      updated_at: string;
+    };
+    Insert: {
+      id?: string;
+      user_id: string;
+      meeting_type: string;
+      normalized_name: string;
+      frequency?: string | null;
+      first_occurrence: string;
+      last_occurrence: string;
+      occurrence_count?: number;
+      last_checklist_id?: string | null;
+      last_summary?: string | null;
+      created_at?: string;
+      updated_at?: string;
+    };
+    Update: {
+      id?: string;
+      user_id?: string;
+      meeting_type?: string;
+      normalized_name?: string;
+      frequency?: string | null;
+      first_occurrence?: string;
+      last_occurrence?: string;
+      occurrence_count?: number;
+      last_checklist_id?: string | null;
+      last_summary?: string | null;
+      created_at?: string;
+      updated_at?: string;
+    };
+  };
 };

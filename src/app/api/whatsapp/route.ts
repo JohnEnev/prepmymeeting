@@ -6,6 +6,7 @@ import {
   extractMessageText,
   markMessageAsRead,
 } from "@/lib/whatsapp";
+import { supabase } from "@/lib/supabase";
 import {
   getOrCreateUser,
   logConversation,
@@ -16,6 +17,9 @@ import {
   updateSessionActivity,
   deactivateOldSessions,
   logConversationWithSession,
+  getUserPreferences,
+  findOrCreateRecurringMeeting,
+  updateRecurringMeeting,
 } from "@/lib/db";
 import { classifyIntent, buildPrepTopic, quickClassify } from "@/lib/nlp";
 import { extractURLs, parseURL, buildURLContext } from "@/lib/url-parser";
@@ -25,6 +29,14 @@ import {
   truncateContext,
 } from "@/lib/conversation-context";
 import { generateFollowUpResponse, shouldUsePrepFlow } from "@/lib/follow-up";
+import {
+  detectsPastReference,
+  findPastContext,
+  buildPastContextString,
+  inferPreferencesFromBehavior,
+  detectRecurringPattern,
+  checkForRecurringMeeting,
+} from "@/lib/long-term-memory";
 
 const WHATSAPP_WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -114,7 +126,12 @@ function extractResponseText(data: unknown): string | null {
 /**
  * Generate prep checklist using OpenAI
  */
-async function generatePrepChecklist(topic: string, urlContext?: string): Promise<string> {
+async function generatePrepChecklist(
+  topic: string,
+  urlContext?: string,
+  pastContext?: string,
+  userPreferences?: { preferred_length: string; preferred_tone: string; max_bullets: number }
+): Promise<string> {
   if (!OPENAI_API_KEY) {
     return `Prep checklist for: ${topic}\n\n- Goals and context\n- Key questions (3-5)\n- Constraints (time, budget, risks)\n- Next steps & follow-up\n\n(Add OPENAI_API_KEY to get detailed suggestions.)`;
   }
@@ -130,12 +147,35 @@ async function generatePrepChecklist(topic: string, urlContext?: string): Promis
         "You're a helpful friend giving quick, practical advice for meeting prep.",
         "Be conversational and warm. Start with a friendly intro like 'Of course! Here's what I'd ask...' or 'Sure thing! Here are the key things...'",
         "Use plain text with simple bullets (•) - NO markdown headers or formatting.",
-        "Keep it SHORT - max 8-10 bullets total.",
-        "Focus on the most important questions and 2-3 things to bring.",
-        "Sound natural, like texting a friend.",
-        "",
-        `Topic: ${topic}`,
       ];
+
+      // Apply user preferences
+      if (userPreferences) {
+        if (userPreferences.preferred_length === "short") {
+          promptParts.push(`Keep it SHORT - max ${userPreferences.max_bullets} bullets total.`);
+        } else if (userPreferences.preferred_length === "long") {
+          promptParts.push(`Provide DETAILED information with examples and context. Aim for 15-20 comprehensive bullets.`);
+        } else {
+          promptParts.push(`Keep it SHORT - max 8-10 bullets total.`);
+        }
+
+        if (userPreferences.preferred_tone === "formal") {
+          promptParts.push("Use PROFESSIONAL, business-appropriate language.");
+        } else if (userPreferences.preferred_tone === "casual") {
+          promptParts.push("Use CASUAL, friendly language like texting a friend.");
+        }
+      } else {
+        promptParts.push("Keep it SHORT - max 8-10 bullets total.");
+      }
+
+      promptParts.push("Focus on the most important questions and 2-3 things to bring.");
+      promptParts.push("Sound natural, like texting a friend.");
+      promptParts.push("");
+      promptParts.push(`Topic: ${topic}`);
+
+      if (pastContext) {
+        promptParts.push("", "PAST CONTEXT (reference this if relevant):", pastContext);
+      }
 
       if (urlContext) {
         promptParts.push("", "CONTEXT FROM URL:", urlContext);
@@ -166,7 +206,33 @@ async function generatePrepChecklist(topic: string, urlContext?: string): Promis
       const text = extractResponseText(data);
       return text || `Could not generate checklist for: ${topic}`;
     } else {
+      let systemContent = "You're a helpful friend giving quick, practical advice for meeting prep. Be conversational and warm. Start with a friendly intro like 'Of course! Here's what I'd ask...' or 'Sure thing! Here are the key things...'. Use plain text with simple bullets (•) - NO markdown headers or formatting.";
+
+      // Apply user preferences
+      if (userPreferences) {
+        if (userPreferences.preferred_length === "short") {
+          systemContent += ` Keep it SHORT - max ${userPreferences.max_bullets} bullets total.`;
+        } else if (userPreferences.preferred_length === "long") {
+          systemContent += ` Provide DETAILED information with examples and context. Aim for 15-20 comprehensive bullets.`;
+        } else {
+          systemContent += ` Keep it SHORT - max 8-10 bullets total.`;
+        }
+
+        if (userPreferences.preferred_tone === "formal") {
+          systemContent += " Use PROFESSIONAL, business-appropriate language.";
+        } else if (userPreferences.preferred_tone === "casual") {
+          systemContent += " Use CASUAL, friendly language like texting a friend.";
+        }
+      } else {
+        systemContent += " Keep it SHORT - max 8-10 bullets total.";
+      }
+
+      systemContent += " Focus on the most important questions and 2-3 things to bring. Sound natural, like texting a friend. If context from a URL or past conversations is provided, use it to tailor your advice.";
+
       let userContent = `Topic: ${topic}`;
+      if (pastContext) {
+        userContent += `\n\nPAST CONTEXT (reference this if relevant):\n${pastContext}`;
+      }
       if (urlContext) {
         userContent += `\n\nCONTEXT FROM URL:\n${urlContext}`;
       }
@@ -180,8 +246,7 @@ async function generatePrepChecklist(topic: string, urlContext?: string): Promis
         messages: [
           {
             role: "system",
-            content:
-              "You're a helpful friend giving quick, practical advice for meeting prep. Be conversational and warm. Start with a friendly intro like 'Of course! Here's what I'd ask...' or 'Sure thing! Here are the key things...'. Use plain text with simple bullets (•) - NO markdown headers or formatting. Keep it SHORT - max 8-10 bullets total. Focus on the most important questions and 2-3 things to bring. Sound natural, like texting a friend. If context from a URL is provided, use it to tailor your advice.",
+            content: systemContent,
           },
           { role: "user", content: userContent },
         ],
@@ -557,19 +622,76 @@ export async function POST(req: NextRequest) {
         // Handle based on intent
         if (nlpResult.intent === "prep_meeting" && nlpResult.confidence > 0.6) {
           const topic = buildPrepTopic(nlpResult);
-          const checklist = await generatePrepChecklist(topic);
+
+          // Load user preferences
+          const userPrefs = user ? await getUserPreferences(user.id) : null;
+
+          // Detect past references and find context
+          const pastRef = detectsPastReference(text);
+          let pastContextString = "";
+          let recurringMeeting = null;
+
+          if (user && pastRef.isPastReference) {
+            console.log("Detected past reference, searching for context...");
+            const pastContext = await findPastContext(user.id, pastRef.keywords);
+            pastContextString = buildPastContextString(
+              pastContext.checklists,
+              pastContext.conversations
+            );
+          }
+
+          // Check for recurring meeting
+          if (user) {
+            recurringMeeting = await checkForRecurringMeeting(user.id, topic);
+            if (recurringMeeting) {
+              console.log(`Found recurring meeting: ${recurringMeeting.meeting_type} (${recurringMeeting.occurrence_count} times)`);
+              pastContextString += `\n\n${buildPastContextString([], [], recurringMeeting)}`;
+            } else {
+              const recurringPattern = detectRecurringPattern(text);
+              if (recurringPattern.isRecurring && recurringPattern.meetingType) {
+                console.log(`Detected new recurring meeting: ${recurringPattern.meetingType}`);
+                recurringMeeting = await findOrCreateRecurringMeeting(user.id, recurringPattern.meetingType);
+              }
+            }
+          }
+
+          // Generate checklist with all context
+          const checklist = await generatePrepChecklist(
+            topic,
+            undefined,
+            pastContextString || undefined,
+            userPrefs ? {
+              preferred_length: userPrefs.preferred_length,
+              preferred_tone: userPrefs.preferred_tone,
+              max_bullets: userPrefs.max_bullets
+            } : undefined
+          );
+
           const chunks = chunkWhatsAppMessage(checklist);
 
           for (const chunk of chunks) {
             await sendWhatsAppMessage(from, chunk);
-            if (user) {
-              await logConversation(user.id, chunk, "bot");
+            if (user && session) {
+              await logConversationWithSession(user.id, chunk, "bot", session.id);
             }
           }
 
-          // Save checklist to database
+          // Save checklist to database and link to recurring meeting
           if (user) {
-            await saveChecklist(user.id, topic, checklist);
+            const { data: savedChecklist } = await supabase
+              .from("checklists")
+              .insert({ user_id: user.id, topic, content: checklist })
+              .select()
+              .single();
+
+            if (recurringMeeting && savedChecklist) {
+              await updateRecurringMeeting(recurringMeeting.id, savedChecklist.id, topic);
+            }
+          }
+
+          // Update session activity
+          if (session) {
+            await updateSessionActivity(session.id);
           }
 
           return NextResponse.json({ status: "ok" });
