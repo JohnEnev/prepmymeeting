@@ -359,3 +359,330 @@ export async function logConversationWithSession(
     return false;
   }
 }
+
+// ==================== USER PREFERENCES ====================
+
+/**
+ * Get or create user preferences
+ */
+export async function getUserPreferences(
+  userId: string
+): Promise<Database["user_preferences"]["Row"] | null> {
+  try {
+    const { data, error } = await supabase
+      .from("user_preferences")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      // PGRST116 = no rows returned
+      console.error("Error fetching preferences:", error);
+      return null;
+    }
+
+    if (!data) {
+      // Create default preferences
+      const { data: newPrefs, error: createError } = await supabase
+        .from("user_preferences")
+        .insert({
+          user_id: userId,
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error("Error creating preferences:", createError);
+        return null;
+      }
+
+      return newPrefs;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in getUserPreferences:", error);
+    return null;
+  }
+}
+
+/**
+ * Update user preferences
+ */
+export async function updateUserPreferences(
+  userId: string,
+  updates: Partial<Database["user_preferences"]["Update"]>
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("user_preferences")
+      .update(updates)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("Error updating preferences:", error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in updateUserPreferences:", error);
+    return false;
+  }
+}
+
+// ==================== CONVERSATION SEARCH ====================
+
+/**
+ * Search past conversations by keyword
+ */
+export async function searchPastConversations(
+  userId: string,
+  keyword: string,
+  limit = 20
+): Promise<Database["conversations"]["Row"][]> {
+  try {
+    const { data, error } = await supabase
+      .from("conversations")
+      .select("*")
+      .eq("user_id", userId)
+      .ilike("message_text", `%${keyword}%`)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error("Error searching conversations:", error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error("Error in searchPastConversations:", error);
+    return [];
+  }
+}
+
+/**
+ * Get checklists by topic keyword
+ */
+export async function searchPastChecklists(
+  userId: string,
+  keyword: string,
+  limit = 10
+): Promise<Database["checklists"]["Row"][]> {
+  try {
+    const { data, error } = await supabase
+      .from("checklists")
+      .select("*")
+      .eq("user_id", userId)
+      .ilike("topic", `%${keyword}%`)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error("Error searching checklists:", error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error("Error in searchPastChecklists:", error);
+    return [];
+  }
+}
+
+// ==================== RECURRING MEETINGS ====================
+
+/**
+ * Normalize meeting name for matching
+ */
+function normalizeMeetingName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Find or create recurring meeting
+ */
+export async function findOrCreateRecurringMeeting(
+  userId: string,
+  meetingType: string
+): Promise<Database["recurring_meetings"]["Row"] | null> {
+  try {
+    const normalized = normalizeMeetingName(meetingType);
+
+    // Try to find existing recurring meeting
+    const { data: existing, error: findError } = await supabase
+      .from("recurring_meetings")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("normalized_name", normalized)
+      .single();
+
+    if (existing && !findError) {
+      // Update occurrence count and last occurrence
+      const { data: updated } = await supabase
+        .from("recurring_meetings")
+        .update({
+          last_occurrence: new Date().toISOString(),
+          occurrence_count: existing.occurrence_count + 1,
+        })
+        .eq("id", existing.id)
+        .select()
+        .single();
+
+      return updated || existing;
+    }
+
+    // Create new recurring meeting
+    const { data: newMeeting, error: createError } = await supabase
+      .from("recurring_meetings")
+      .insert({
+        user_id: userId,
+        meeting_type: meetingType,
+        normalized_name: normalized,
+        first_occurrence: new Date().toISOString(),
+        last_occurrence: new Date().toISOString(),
+        occurrence_count: 1,
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      console.error("Error creating recurring meeting:", createError);
+      return null;
+    }
+
+    return newMeeting;
+  } catch (error) {
+    console.error("Error in findOrCreateRecurringMeeting:", error);
+    return null;
+  }
+}
+
+/**
+ * Update recurring meeting with checklist reference
+ */
+export async function updateRecurringMeeting(
+  meetingId: string,
+  checklistId: string,
+  summary?: string
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("recurring_meetings")
+      .update({
+        last_checklist_id: checklistId,
+        last_summary: summary || null,
+      })
+      .eq("id", meetingId);
+
+    if (error) {
+      console.error("Error updating recurring meeting:", error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in updateRecurringMeeting:", error);
+    return false;
+  }
+}
+
+/**
+ * Get recurring meeting by name
+ */
+export async function getRecurringMeeting(
+  userId: string,
+  meetingType: string
+): Promise<Database["recurring_meetings"]["Row"] | null> {
+  try {
+    const normalized = normalizeMeetingName(meetingType);
+
+    const { data, error } = await supabase
+      .from("recurring_meetings")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("normalized_name", normalized)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      console.error("Error fetching recurring meeting:", error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in getRecurringMeeting:", error);
+    return null;
+  }
+}
+
+// ==================== CONVERSATION SUMMARIES ====================
+
+/**
+ * Create conversation summary
+ */
+export async function createConversationSummary(
+  userId: string,
+  sessionId: string | null,
+  topic: string,
+  summary: string,
+  keyPoints: string[],
+  messageCount: number,
+  startDate: string,
+  endDate: string
+): Promise<boolean> {
+  try {
+    const { error } = await supabase.from("conversation_summaries").insert({
+      user_id: userId,
+      session_id: sessionId,
+      topic,
+      summary,
+      key_points: keyPoints,
+      message_count: messageCount,
+      start_date: startDate,
+      end_date: endDate,
+    });
+
+    if (error) {
+      console.error("Error creating conversation summary:", error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in createConversationSummary:", error);
+    return false;
+  }
+}
+
+/**
+ * Get recent conversation summaries
+ */
+export async function getRecentSummaries(
+  userId: string,
+  limit = 5
+): Promise<Database["conversation_summaries"]["Row"][]> {
+  try {
+    const { data, error } = await supabase
+      .from("conversation_summaries")
+      .select("*")
+      .eq("user_id", userId)
+      .order("end_date", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error("Error fetching summaries:", error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error("Error in getRecentSummaries:", error);
+    return [];
+  }
+}
