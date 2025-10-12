@@ -36,6 +36,12 @@ import {
   trackCost,
   COSTS,
 } from "@/lib/rate-limit";
+import { downloadTelegramAudio } from "@/lib/audio/download";
+import { transcribeAudio, calculateWhisperCost } from "@/lib/audio/transcribe";
+import {
+  validateAudioFile,
+  validateAudioDuration,
+} from "@/lib/audio/validators";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -331,8 +337,10 @@ export async function POST(req: NextRequest) {
 
     const message = update?.message;
     const chatId: number | undefined = message?.chat?.id;
-    const text: string | undefined = message?.text;
+    let text: string | undefined = message?.text;
     const from = message?.from;
+    const voice = message?.voice;
+    const audio = message?.audio;
 
     if (!chatId) {
       return NextResponse.json({ ok: true });
@@ -347,6 +355,51 @@ export async function POST(req: NextRequest) {
         first_name: from.first_name,
         last_name: from.last_name,
       });
+    }
+
+    // Handle voice messages
+    if ((voice?.file_id || audio?.file_id) && user) {
+      console.log("Voice/audio message detected, processing...");
+      const fileId = voice?.file_id || audio?.file_id;
+
+      try {
+        // Send processing acknowledgment
+        await sendTelegramMessage(chatId, "🎤 Got your voice message! Transcribing...");
+
+        // Download audio file
+        const audioFile = await downloadTelegramAudio(fileId);
+
+        // Validate audio file
+        const formatValidation = validateAudioFile(audioFile.mimeType, audioFile.fileSize);
+        if (!formatValidation.valid) {
+          await sendTelegramMessage(chatId, formatValidation.error || "Invalid audio file");
+          return NextResponse.json({ ok: true });
+        }
+
+        const durationValidation = validateAudioDuration(audioFile.fileSize);
+        if (!durationValidation.valid) {
+          await sendTelegramMessage(chatId, durationValidation.error || "Audio file too long");
+          return NextResponse.json({ ok: true });
+        }
+
+        // Transcribe audio
+        const transcription = await transcribeAudio(audioFile);
+        text = transcription.text;
+
+        console.log(`Voice transcribed: "${text}"`);
+
+        // Track Whisper cost
+        if (transcription.duration) {
+          const whisperCost = calculateWhisperCost(transcription.duration);
+          await trackCost(user.id, whisperCost);
+          console.log(`Whisper cost: ${whisperCost} cents for ${transcription.duration}s`);
+        }
+      } catch (error) {
+        console.error("Voice message processing error:", error);
+        const errorMsg = error instanceof Error ? error.message : "Failed to process voice message. Please try sending a text message instead.";
+        await sendTelegramMessage(chatId, errorMsg);
+        return NextResponse.json({ ok: true });
+      }
     }
 
     // Session management and logging

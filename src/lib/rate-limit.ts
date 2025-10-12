@@ -18,6 +18,7 @@ export const COSTS = {
   O4_MINI: 0.2, // ~$0.002 per request
   GPT4O_MINI: 0.01, // ~$0.0001 per request
   JINA_READER: 0.01, // ~$0.0001 per URL
+  WHISPER_PER_MINUTE: 0.6, // $0.006 per minute
 };
 
 export interface RateLimitResult {

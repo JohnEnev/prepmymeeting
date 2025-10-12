@@ -130,6 +130,10 @@ export interface WhatsAppMessage {
   text?: {
     body: string;
   };
+  audio?: {
+    id: string;
+    mime_type?: string;
+  };
   type: "text" | "image" | "video" | "audio" | "document" | "location";
 }
 
