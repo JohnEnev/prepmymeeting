@@ -43,6 +43,12 @@ import {
   trackCost,
   COSTS,
 } from "@/lib/rate-limit";
+import { downloadWhatsAppAudio } from "@/lib/audio/download";
+import { transcribeAudio, calculateWhisperCost } from "@/lib/audio/transcribe";
+import {
+  validateAudioFile,
+  validateAudioDuration,
+} from "@/lib/audio/validators";
 
 const WHATSAPP_WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -330,7 +336,7 @@ export async function POST(req: NextRequest) {
     // Extract message details
     const from = message.from;
     const messageId = message.id;
-    const text = extractMessageText(message);
+    let text = extractMessageText(message);
 
     console.log("Extracted text:", text);
     console.log("Message type:", message.type);
@@ -347,6 +353,50 @@ export async function POST(req: NextRequest) {
         firstName: contact.profile.name,
         platform: "whatsapp",
       });
+    }
+
+    // Handle voice messages
+    if (message.type === "audio" && message.audio?.id) {
+      console.log("Voice message detected, processing...");
+
+      try {
+        // Send processing acknowledgment
+        await sendWhatsAppMessage(from, "🎤 Got your voice message! Transcribing...");
+
+        // Download audio file
+        const audioFile = await downloadWhatsAppAudio(message.audio.id);
+
+        // Validate audio file
+        const formatValidation = validateAudioFile(audioFile.mimeType, audioFile.fileSize);
+        if (!formatValidation.valid) {
+          await sendWhatsAppMessage(from, formatValidation.error || "Invalid audio file");
+          return NextResponse.json({ status: "ok" });
+        }
+
+        const durationValidation = validateAudioDuration(audioFile.fileSize);
+        if (!durationValidation.valid) {
+          await sendWhatsAppMessage(from, durationValidation.error || "Audio file too long");
+          return NextResponse.json({ status: "ok" });
+        }
+
+        // Transcribe audio
+        const transcription = await transcribeAudio(audioFile);
+        text = transcription.text;
+
+        console.log(`Voice transcribed: "${text}"`);
+
+        // Track Whisper cost
+        if (user && transcription.duration) {
+          const whisperCost = calculateWhisperCost(transcription.duration);
+          await trackCost(user.id, whisperCost);
+          console.log(`Whisper cost: ${whisperCost} cents for ${transcription.duration}s`);
+        }
+      } catch (error) {
+        console.error("Voice message processing error:", error);
+        const errorMsg = error instanceof Error ? error.message : "Failed to process voice message. Please try sending a text message instead.";
+        await sendWhatsAppMessage(from, errorMsg);
+        return NextResponse.json({ status: "ok" });
+      }
     }
 
     // Session management and logging
