@@ -49,6 +49,16 @@ import {
   validateAudioFile,
   validateAudioDuration,
 } from "@/lib/audio/validators";
+import {
+  searchWeb,
+  buildPrepSearchQuery,
+  shouldSearch,
+  extractSearchTopic,
+  isSearchEnabled,
+  shouldShowCitations,
+  formatCitations,
+  buildSearchContextPrompt,
+} from "@/lib/search";
 
 const WHATSAPP_WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -142,6 +152,7 @@ async function generatePrepChecklist(
   topic: string,
   urlContext?: string,
   pastContext?: string,
+  searchContext?: string,
   userPreferences?: { preferred_length: string; preferred_tone: string; max_bullets: number }
 ): Promise<string> {
   if (!OPENAI_API_KEY) {
@@ -191,6 +202,10 @@ async function generatePrepChecklist(
 
       if (urlContext) {
         promptParts.push("", "CONTEXT FROM URL:", urlContext);
+      }
+
+      if (searchContext) {
+        promptParts.push("", "CURRENT WEB INFORMATION:", searchContext);
       }
 
       const prompt = promptParts.join("\n");
@@ -247,6 +262,9 @@ async function generatePrepChecklist(
       }
       if (urlContext) {
         userContent += `\n\nCONTEXT FROM URL:\n${urlContext}`;
+      }
+      if (searchContext) {
+        userContent += `\n\nCURRENT WEB INFORMATION:\n${searchContext}`;
       }
 
       const payload: {
@@ -725,11 +743,42 @@ export async function POST(req: NextRequest) {
             }
           }
 
+          // Check if web search is needed
+          let searchContextString = "";
+          let searchCitations: string[] = [];
+          if (isSearchEnabled()) {
+            const searchDetection = shouldSearch(text);
+
+            if (searchDetection.shouldSearch) {
+              console.log(`🔍 Search triggered: ${searchDetection.reason}`);
+
+              try {
+                const searchTopic = extractSearchTopic(text) || topic;
+                const searchQuery = buildPrepSearchQuery(text, searchTopic);
+
+                const searchResult = await searchWeb(searchQuery);
+                searchContextString = searchResult.answer;
+                searchCitations = searchResult.citations || [];
+
+                console.log(`✅ Search complete, got ${searchContextString.length} chars`);
+
+                // Track search cost
+                if (user) {
+                  await trackCost(user.id, COSTS.WEB_SEARCH);
+                }
+              } catch (error) {
+                console.error("Search failed, continuing without search context:", error);
+                // Continue without search context
+              }
+            }
+          }
+
           // Generate checklist with all context
           const checklist = await generatePrepChecklist(
             topic,
             undefined,
             pastContextString || undefined,
+            searchContextString || undefined,
             userPrefs ? {
               preferred_length: userPrefs.preferred_length,
               preferred_tone: userPrefs.preferred_tone,
@@ -743,7 +792,13 @@ export async function POST(req: NextRequest) {
             await trackCost(user.id, isO4 ? COSTS.O4_MINI : COSTS.GPT4O_MINI);
           }
 
-          const chunks = chunkWhatsAppMessage(checklist);
+          // Add citations if search was used and citations should be shown
+          let finalChecklist = checklist;
+          if (shouldShowCitations() && searchCitations.length > 0) {
+            finalChecklist += formatCitations(searchCitations);
+          }
+
+          const chunks = chunkWhatsAppMessage(finalChecklist);
 
           for (const chunk of chunks) {
             await sendWhatsAppMessage(from, chunk);
@@ -756,7 +811,7 @@ export async function POST(req: NextRequest) {
           if (user) {
             const { data: savedChecklist } = await supabase
               .from("checklists")
-              .insert({ user_id: user.id, topic, content: checklist })
+              .insert({ user_id: user.id, topic, content: finalChecklist })
               .select()
               .single();
 
