@@ -278,4 +278,136 @@ export type Database = {
       updated_at?: string;
     };
   };
+  calendar_connections: {
+    Row: {
+      id: string;
+      user_id: string;
+      provider: "google" | "outlook";
+      access_token: string;
+      refresh_token: string;
+      token_expires_at: string;
+      scopes: string[];
+      is_active: boolean;
+      created_at: string;
+      updated_at: string;
+    };
+    Insert: {
+      id?: string;
+      user_id: string;
+      provider?: "google" | "outlook";
+      access_token: string;
+      refresh_token: string;
+      token_expires_at: string;
+      scopes?: string[];
+      is_active?: boolean;
+      created_at?: string;
+      updated_at?: string;
+    };
+    Update: {
+      id?: string;
+      user_id?: string;
+      provider?: "google" | "outlook";
+      access_token?: string;
+      refresh_token?: string;
+      token_expires_at?: string;
+      scopes?: string[];
+      is_active?: boolean;
+      created_at?: string;
+      updated_at?: string;
+    };
+  };
+  calendar_events: {
+    Row: {
+      id: string;
+      user_id: string;
+      connection_id: string;
+      event_id: string;
+      calendar_id: string;
+      summary: string;
+      description: string | null;
+      location: string | null;
+      start_time: string;
+      end_time: string;
+      attendees: Record<string, unknown> | null;
+      meeting_link: string | null;
+      prep_notification_sent: boolean;
+      prep_notification_sent_at: string | null;
+      prep_generated: boolean;
+      checklist_id: string | null;
+      created_at: string;
+      updated_at: string;
+    };
+    Insert: {
+      id?: string;
+      user_id: string;
+      connection_id: string;
+      event_id: string;
+      calendar_id: string;
+      summary: string;
+      description?: string | null;
+      location?: string | null;
+      start_time: string;
+      end_time: string;
+      attendees?: Record<string, unknown> | null;
+      meeting_link?: string | null;
+      prep_notification_sent?: boolean;
+      prep_notification_sent_at?: string | null;
+      prep_generated?: boolean;
+      checklist_id?: string | null;
+      created_at?: string;
+      updated_at?: string;
+    };
+    Update: {
+      id?: string;
+      user_id?: string;
+      connection_id?: string;
+      event_id?: string;
+      calendar_id?: string;
+      summary?: string;
+      description?: string | null;
+      location?: string | null;
+      start_time?: string;
+      end_time?: string;
+      attendees?: Record<string, unknown> | null;
+      meeting_link?: string | null;
+      prep_notification_sent?: boolean;
+      prep_notification_sent_at?: string | null;
+      prep_generated?: boolean;
+      checklist_id?: string | null;
+      created_at?: string;
+      updated_at?: string;
+    };
+  };
+  notification_settings: {
+    Row: {
+      id: string;
+      user_id: string;
+      notification_enabled: boolean;
+      advance_notice_hours: number;
+      notification_time_preference: "morning" | "afternoon" | "evening" | "anytime";
+      auto_generate_prep: boolean;
+      created_at: string;
+      updated_at: string;
+    };
+    Insert: {
+      id?: string;
+      user_id: string;
+      notification_enabled?: boolean;
+      advance_notice_hours?: number;
+      notification_time_preference?: "morning" | "afternoon" | "evening" | "anytime";
+      auto_generate_prep?: boolean;
+      created_at?: string;
+      updated_at?: string;
+    };
+    Update: {
+      id?: string;
+      user_id?: string;
+      notification_enabled?: boolean;
+      advance_notice_hours?: number;
+      notification_time_preference?: "morning" | "afternoon" | "evening" | "anytime";
+      auto_generate_prep?: boolean;
+      created_at?: string;
+      updated_at?: string;
+    };
+  };
 };
