@@ -20,6 +20,10 @@ import {
   getUserPreferences,
   findOrCreateRecurringMeeting,
   updateRecurringMeeting,
+  getOrCreateNotificationSettings,
+  updateNotificationSettings,
+  getCalendarEvent,
+  linkChecklistToEvent,
 } from "@/lib/db";
 import { classifyIntent, buildPrepTopic, quickClassify } from "@/lib/nlp";
 import { extractURLs, parseURL, buildURLContext } from "@/lib/url-parser";
@@ -59,6 +63,7 @@ import {
   formatCitations,
   buildSearchContextPrompt,
 } from "@/lib/search";
+import { generateAuthUrl, disconnectCalendar, getActiveConnection } from "@/lib/calendar/google-oauth";
 
 const WHATSAPP_WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -522,6 +527,136 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ status: "ok" });
         }
 
+        case "/connect_calendar": {
+          if (!user) {
+            return NextResponse.json({ status: "ok" });
+          }
+
+          // Check if already connected
+          const existingConnection = await getActiveConnection(user.id);
+          if (existingConnection) {
+            const alreadyConnectedMsg =
+              "Your Google Calendar is already connected! 📅\n\nUse /disconnect_calendar to remove the connection, or /calendar_settings to adjust notification preferences.";
+            await sendWhatsAppMessage(from, alreadyConnectedMsg);
+            await logConversation(user.id, alreadyConnectedMsg, "bot");
+            return NextResponse.json({ status: "ok" });
+          }
+
+          // Generate OAuth URL
+          const authUrl = generateAuthUrl(user.id);
+          const connectMsg = `📅 *Connect Your Google Calendar*\n\nTo enable proactive meeting prep suggestions, please connect your calendar:\n\n${authUrl}\n\n1. Click the link above\n2. Sign in with Google\n3. Grant calendar access\n\nI'll send you prep suggestions 24 hours before your meetings!`;
+          await sendWhatsAppMessage(from, connectMsg);
+          if (user) {
+            await logConversation(user.id, connectMsg, "bot");
+          }
+          return NextResponse.json({ status: "ok" });
+        }
+
+        case "/disconnect_calendar": {
+          if (!user) {
+            return NextResponse.json({ status: "ok" });
+          }
+
+          try {
+            await disconnectCalendar(user.id);
+            const disconnectMsg =
+              "✅ Your Google Calendar has been disconnected. You won't receive proactive prep notifications anymore.\n\nYou can reconnect anytime with /connect_calendar";
+            await sendWhatsAppMessage(from, disconnectMsg);
+            await logConversation(user.id, disconnectMsg, "bot");
+          } catch (error) {
+            const errorMsg =
+              "❌ Failed to disconnect calendar. Please try again later.";
+            await sendWhatsAppMessage(from, errorMsg);
+            await logConversation(user.id, errorMsg, "bot");
+          }
+          return NextResponse.json({ status: "ok" });
+        }
+
+        case "/calendar_settings": {
+          if (!user) {
+            return NextResponse.json({ status: "ok" });
+          }
+
+          const settings = await getOrCreateNotificationSettings(user.id);
+          if (!settings) {
+            const errorMsg = "❌ Failed to load settings. Please try again.";
+            await sendWhatsAppMessage(from, errorMsg);
+            await logConversation(user.id, errorMsg, "bot");
+            return NextResponse.json({ status: "ok" });
+          }
+
+          const settingsMsg = `📅 *Calendar Notification Settings*\n\n` +
+            `• Notifications: ${settings.notification_enabled ? "✅ Enabled" : "❌ Disabled"}\n` +
+            `• Advance Notice: ${settings.advance_notice_hours} hours\n` +
+            `• Auto-Generate Prep: ${settings.auto_generate_prep ? "✅ Yes" : "❌ No (ask first)"}\n\n` +
+            `To change settings, use:\n` +
+            `/set_advance_hours <hours>` +
+            ` - Set notification timing (1-168 hours)\n` +
+            `/toggle_notifications` +
+            ` - Enable/disable notifications\n` +
+            `/toggle_auto_prep` +
+            ` - Auto-generate prep without asking`;
+
+          await sendWhatsAppMessage(from, settingsMsg);
+          await logConversation(user.id, settingsMsg, "bot");
+          return NextResponse.json({ status: "ok" });
+        }
+
+        case "/set_advance_hours": {
+          if (!user) {
+            return NextResponse.json({ status: "ok" });
+          }
+
+          const hours = parseInt(command.args);
+          if (isNaN(hours) || hours < 1 || hours > 168) {
+            const errorMsg =
+              "Please provide a valid number of hours between 1 and 168.\n\nExample: /set_advance_hours 24";
+            await sendWhatsAppMessage(from, errorMsg);
+            await logConversation(user.id, errorMsg, "bot");
+            return NextResponse.json({ status: "ok" });
+          }
+
+          await updateNotificationSettings(user.id, { advance_notice_hours: hours });
+          const successMsg = `✅ Notification timing updated! I'll now send prep suggestions ${hours} hours before your meetings.`;
+          await sendWhatsAppMessage(from, successMsg);
+          await logConversation(user.id, successMsg, "bot");
+          return NextResponse.json({ status: "ok" });
+        }
+
+        case "/toggle_notifications": {
+          if (!user) {
+            return NextResponse.json({ status: "ok" });
+          }
+
+          const settings = await getOrCreateNotificationSettings(user.id);
+          const newValue = !settings?.notification_enabled;
+          await updateNotificationSettings(user.id, { notification_enabled: newValue });
+
+          const toggleMsg = newValue
+            ? "✅ Calendar notifications enabled! I'll send you proactive prep suggestions."
+            : "❌ Calendar notifications disabled. Use /toggle_notifications to re-enable.";
+          await sendWhatsAppMessage(from, toggleMsg);
+          await logConversation(user.id, toggleMsg, "bot");
+          return NextResponse.json({ status: "ok" });
+        }
+
+        case "/toggle_auto_prep": {
+          if (!user) {
+            return NextResponse.json({ status: "ok" });
+          }
+
+          const settings = await getOrCreateNotificationSettings(user.id);
+          const newValue = !settings?.auto_generate_prep;
+          await updateNotificationSettings(user.id, { auto_generate_prep: newValue });
+
+          const toggleMsg = newValue
+            ? "✅ Auto-prep enabled! I'll automatically generate prep for your meetings."
+            : "❌ Auto-prep disabled. I'll ask before generating prep.";
+          await sendWhatsAppMessage(from, toggleMsg);
+          await logConversation(user.id, toggleMsg, "bot");
+          return NextResponse.json({ status: "ok" });
+        }
+
         default: {
           const unknownMsg = "Unknown command. Try /help";
           await sendWhatsAppMessage(from, unknownMsg);
@@ -621,6 +756,69 @@ export async function POST(req: NextRequest) {
           if (user) {
             await logConversation(user.id, errorMsg, "bot");
           }
+          return NextResponse.json({ status: "ok" });
+        }
+      }
+    }
+
+    // Check for calendar event prep confirmation (e.g., "yes <eventId>")
+    if (text && user) {
+      const yesEventMatch = text.match(/^yes\s+([a-f0-9-]{36})$/i);
+      if (yesEventMatch) {
+        const eventId = yesEventMatch[1];
+        console.log(`User confirmed prep for event: ${eventId}`);
+
+        // Get event from database
+        const event = await getCalendarEvent(eventId);
+        if (event) {
+          // Load user preferences
+          const userPrefs = await getUserPreferences(user.id);
+
+          // Generate prep for the event
+          const topic = event.summary;
+          const eventContext = event.description || "";
+
+          const checklist = await generatePrepChecklist(
+            topic,
+            eventContext,
+            undefined,
+            undefined,
+            userPrefs ? {
+              preferred_length: userPrefs.preferred_length,
+              preferred_tone: userPrefs.preferred_tone,
+              max_bullets: userPrefs.max_bullets
+            } : undefined
+          );
+
+          // Track cost
+          const isO4 = OPENAI_MODEL.toLowerCase().startsWith("o4");
+          await trackCost(user.id, isO4 ? COSTS.O4_MINI : COSTS.GPT4O_MINI);
+
+          // Send prep
+          const chunks = chunkWhatsAppMessage(checklist);
+          for (const chunk of chunks) {
+            await sendWhatsAppMessage(from, chunk);
+            if (session) {
+              await logConversationWithSession(user.id, chunk, "bot", session.id);
+            }
+          }
+
+          // Save checklist and link to event
+          const { data: savedChecklist } = await supabase
+            .from("checklists")
+            .insert({ user_id: user.id, topic, content: checklist })
+            .select()
+            .single();
+
+          if (savedChecklist) {
+            await linkChecklistToEvent(eventId, savedChecklist.id);
+          }
+
+          return NextResponse.json({ status: "ok" });
+        } else {
+          const errorMsg = "Sorry, I couldn't find that event. It may have been removed or cancelled.";
+          await sendWhatsAppMessage(from, errorMsg);
+          await logConversation(user.id, errorMsg, "bot");
           return NextResponse.json({ status: "ok" });
         }
       }

@@ -686,3 +686,260 @@ export async function getRecentSummaries(
     return [];
   }
 }
+
+// ==================== CALENDAR ====================
+
+/**
+ * Get user by ID
+ */
+export async function getUser(userId: string): Promise<Database["users"]["Row"] | null> {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (error) {
+      console.error("Error fetching user:", error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in getUser:", error);
+    return null;
+  }
+}
+
+/**
+ * Get or create notification settings for user
+ */
+export async function getOrCreateNotificationSettings(
+  userId: string
+): Promise<Database["notification_settings"]["Row"] | null> {
+  try {
+    // Try to fetch existing settings
+    const { data: existing, error: fetchError } = await supabase
+      .from("notification_settings")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (existing && !fetchError) {
+      return existing;
+    }
+
+    // Create default settings
+    const { data: created, error: createError } = await supabase
+      .from("notification_settings")
+      .insert({ user_id: userId })
+      .select()
+      .single();
+
+    if (createError) {
+      console.error("Error creating notification settings:", createError);
+      return null;
+    }
+
+    return created;
+  } catch (error) {
+    console.error("Error in getOrCreateNotificationSettings:", error);
+    return null;
+  }
+}
+
+/**
+ * Update notification settings
+ */
+export async function updateNotificationSettings(
+  userId: string,
+  updates: Partial<Database["notification_settings"]["Update"]>
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("notification_settings")
+      .update(updates)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("Error updating notification settings:", error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in updateNotificationSettings:", error);
+    return false;
+  }
+}
+
+/**
+ * Get all users with active calendar connections
+ */
+export async function getUsersWithActiveCalendars(): Promise<
+  Array<{
+    user: Database["users"]["Row"];
+    connection: Database["calendar_connections"]["Row"];
+    settings: Database["notification_settings"]["Row"] | null;
+  }>
+> {
+  try {
+    const { data: connections, error } = await supabase
+      .from("calendar_connections")
+      .select("*, users(*)")
+      .eq("is_active", true);
+
+    if (error) {
+      console.error("Error fetching active calendar connections:", error);
+      return [];
+    }
+
+    const results = await Promise.all(
+      (connections || []).map(async (conn) => {
+        const settings = await getOrCreateNotificationSettings(conn.user_id);
+        return {
+          user: (conn as any).users,
+          connection: conn,
+          settings,
+        };
+      })
+    );
+
+    return results.filter((r) => r.user && r.settings?.notification_enabled);
+  } catch (error) {
+    console.error("Error in getUsersWithActiveCalendars:", error);
+    return [];
+  }
+}
+
+/**
+ * Save or update calendar event
+ */
+export async function saveCalendarEvent(
+  event: Database["calendar_events"]["Insert"]
+): Promise<string | null> {
+  try {
+    // Check if event already exists
+    const { data: existing } = await supabase
+      .from("calendar_events")
+      .select("id")
+      .eq("user_id", event.user_id)
+      .eq("event_id", event.event_id)
+      .eq("calendar_id", event.calendar_id)
+      .single();
+
+    if (existing) {
+      // Update existing event
+      const { error } = await supabase
+        .from("calendar_events")
+        .update(event)
+        .eq("id", existing.id);
+
+      if (error) {
+        console.error("Error updating calendar event:", error);
+        return null;
+      }
+
+      return existing.id;
+    } else {
+      // Insert new event
+      const { data, error } = await supabase
+        .from("calendar_events")
+        .insert(event)
+        .select("id")
+        .single();
+
+      if (error || !data) {
+        console.error("Error creating calendar event:", error);
+        return null;
+      }
+
+      return data.id;
+    }
+  } catch (error) {
+    console.error("Error in saveCalendarEvent:", error);
+    return null;
+  }
+}
+
+/**
+ * Mark event as prep notification sent
+ */
+export async function markPrepNotificationSent(
+  eventId: string,
+  sent: boolean = true
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("calendar_events")
+      .update({
+        prep_notification_sent: sent,
+        prep_notification_sent_at: sent ? new Date().toISOString() : null,
+      })
+      .eq("id", eventId);
+
+    if (error) {
+      console.error("Error marking prep notification sent:", error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in markPrepNotificationSent:", error);
+    return false;
+  }
+}
+
+/**
+ * Link checklist to calendar event
+ */
+export async function linkChecklistToEvent(
+  eventId: string,
+  checklistId: string
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("calendar_events")
+      .update({
+        checklist_id: checklistId,
+        prep_generated: true,
+      })
+      .eq("id", eventId);
+
+    if (error) {
+      console.error("Error linking checklist to event:", error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in linkChecklistToEvent:", error);
+    return false;
+  }
+}
+
+/**
+ * Get calendar event by database ID
+ */
+export async function getCalendarEvent(
+  eventId: string
+): Promise<Database["calendar_events"]["Row"] | null> {
+  try {
+    const { data, error } = await supabase
+      .from("calendar_events")
+      .select("*")
+      .eq("id", eventId)
+      .single();
+
+    if (error) {
+      console.error("Error fetching calendar event:", error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in getCalendarEvent:", error);
+    return null;
+  }
+}
