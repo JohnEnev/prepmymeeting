@@ -26,7 +26,6 @@ import {
   detectsPastReference,
   findPastContext,
   buildPastContextString,
-  inferPreferencesFromBehavior,
   detectRecurringPattern,
   checkForRecurringMeeting,
 } from "@/lib/long-term-memory";
@@ -50,7 +49,6 @@ import {
   isSearchEnabled,
   shouldShowCitations,
   formatCitations,
-  buildSearchContextPrompt,
 } from "@/lib/search";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;

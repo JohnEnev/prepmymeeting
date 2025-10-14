@@ -168,14 +168,14 @@ async function sendPrepNotification(
       return;
     }
 
-    // Detect meeting type
-    const meetingType = detectMeetingType(event);
+    // Detect meeting type (for future use)
+    const _meetingType = detectMeetingType(event);
 
     // Format event time
     const eventTimeStr = formatEventTime(event);
 
-    // Build context for richer notification
-    const context = buildEventContext(event);
+    // Build context for richer notification (for future use)
+    const _context = buildEventContext(event);
 
     // Create notification message
     let message = `📅 *Upcoming Meeting Alert*\n\n`;

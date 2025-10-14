@@ -87,8 +87,8 @@ function parseCalendarEvent(
   // Parse attendees
   const attendees = event.attendees?.map((attendee) => ({
     email: attendee.email || "",
-    name: attendee.displayName,
-    responseStatus: attendee.responseStatus,
+    name: attendee.displayName || undefined,
+    responseStatus: attendee.responseStatus || undefined,
   }));
 
   // Extract meeting link (Google Meet, Zoom, etc.)

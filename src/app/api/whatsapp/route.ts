@@ -37,7 +37,6 @@ import {
   detectsPastReference,
   findPastContext,
   buildPastContextString,
-  inferPreferencesFromBehavior,
   detectRecurringPattern,
   checkForRecurringMeeting,
 } from "@/lib/long-term-memory";
@@ -61,7 +60,6 @@ import {
   isSearchEnabled,
   shouldShowCitations,
   formatCitations,
-  buildSearchContextPrompt,
 } from "@/lib/search";
 import { generateAuthUrl, disconnectCalendar, getActiveConnection } from "@/lib/calendar/google-oauth";
 
@@ -563,7 +561,7 @@ export async function POST(req: NextRequest) {
               "✅ Your Google Calendar has been disconnected. You won't receive proactive prep notifications anymore.\n\nYou can reconnect anytime with /connect_calendar";
             await sendWhatsAppMessage(from, disconnectMsg);
             await logConversation(user.id, disconnectMsg, "bot");
-          } catch (error) {
+          } catch {
             const errorMsg =
               "❌ Failed to disconnect calendar. Please try again later.";
             await sendWhatsAppMessage(from, errorMsg);

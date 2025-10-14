@@ -795,11 +795,16 @@ export async function getUsersWithActiveCalendars(): Promise<
       return [];
     }
 
+    type ConnectionWithUser = Database["calendar_connections"]["Row"] & {
+      users: Database["users"]["Row"] | Database["users"]["Row"][];
+    };
+
     const results = await Promise.all(
-      (connections || []).map(async (conn) => {
+      (connections || []).map(async (conn: ConnectionWithUser) => {
         const settings = await getOrCreateNotificationSettings(conn.user_id);
+        const user = Array.isArray(conn.users) ? conn.users[0] : conn.users;
         return {
-          user: (conn as any).users,
+          user,
           connection: conn,
           settings,
         };
