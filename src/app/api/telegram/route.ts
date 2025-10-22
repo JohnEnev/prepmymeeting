@@ -50,6 +50,12 @@ import {
   shouldShowCitations,
   formatCitations,
 } from "@/lib/search";
+import {
+  shouldSendWelcomeMessage,
+  markWelcomeMessageSent,
+  updateUserLastMessage,
+  WELCOME_MESSAGE,
+} from "@/lib/welcome-message";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -415,6 +421,24 @@ export async function POST(req: NextRequest) {
         const errorMsg = error instanceof Error ? error.message : "Failed to process voice message. Please try sending a text message instead.";
         await sendTelegramMessage(chatId, errorMsg);
         return NextResponse.json({ ok: true });
+      }
+    }
+
+    // Check if we should send welcome message (first time or returning after inactivity)
+    if (user && text) {
+      const shouldWelcome = await shouldSendWelcomeMessage(user.id);
+      if (shouldWelcome) {
+        console.log(`Sending welcome message to user ${user.id}`);
+        const chunks = chunkForTelegram(WELCOME_MESSAGE);
+        for (const chunk of chunks) {
+          await sendTelegramMessage(chatId, chunk);
+        }
+        await markWelcomeMessageSent(user.id);
+        await logConversation(user.id, WELCOME_MESSAGE, "bot");
+        // Continue processing the user's message below
+      } else {
+        // Update last message time for active users
+        await updateUserLastMessage(user.id);
       }
     }
 

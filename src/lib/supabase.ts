@@ -28,6 +28,8 @@ export type Database = {
       username: string | null;
       first_name: string | null;
       last_name: string | null;
+      last_message_at: string;
+      intro_sent: boolean;
       created_at: string;
       updated_at: string;
     };
@@ -39,6 +41,8 @@ export type Database = {
       username?: string | null;
       first_name?: string | null;
       last_name?: string | null;
+      last_message_at?: string;
+      intro_sent?: boolean;
       created_at?: string;
       updated_at?: string;
     };
@@ -50,6 +54,8 @@ export type Database = {
       username?: string | null;
       first_name?: string | null;
       last_name?: string | null;
+      last_message_at?: string;
+      intro_sent?: boolean;
       created_at?: string;
       updated_at?: string;
     };
