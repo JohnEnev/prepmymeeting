@@ -62,6 +62,12 @@ import {
   formatCitations,
 } from "@/lib/search";
 import { generateAuthUrl, disconnectCalendar, getActiveConnection } from "@/lib/calendar/google-oauth";
+import {
+  shouldSendWelcomeMessage,
+  markWelcomeMessageSent,
+  updateUserLastMessage,
+  WELCOME_MESSAGE,
+} from "@/lib/welcome-message";
 
 const WHATSAPP_WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -417,6 +423,24 @@ export async function POST(req: NextRequest) {
         const errorMsg = error instanceof Error ? error.message : "Failed to process voice message. Please try sending a text message instead.";
         await sendWhatsAppMessage(from, errorMsg);
         return NextResponse.json({ status: "ok" });
+      }
+    }
+
+    // Check if we should send welcome message (first time or returning after inactivity)
+    if (user && text) {
+      const shouldWelcome = await shouldSendWelcomeMessage(user.id);
+      if (shouldWelcome) {
+        console.log(`Sending welcome message to user ${user.id}`);
+        const chunks = chunkWhatsAppMessage(WELCOME_MESSAGE);
+        for (const chunk of chunks) {
+          await sendWhatsAppMessage(from, chunk);
+        }
+        await markWelcomeMessageSent(user.id);
+        await logConversation(user.id, WELCOME_MESSAGE, "bot");
+        // Continue processing the user's message below
+      } else {
+        // Update last message time for active users
+        await updateUserLastMessage(user.id);
       }
     }
 
