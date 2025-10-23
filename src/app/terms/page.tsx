@@ -6,8 +6,8 @@ export default function TermsOfServicePage() {
 
       <h2 style={{ marginTop: '30px' }}>1. Acceptance of Terms</h2>
       <p style={{ fontSize: '16px', lineHeight: '1.6', color: '#555' }}>
-        By accessing or using PrepMyMeeting ("Service"), you agree to be bound by these Terms of Service
-        ("Terms"). If you do not agree to these Terms, do not use the Service.
+        By accessing or using PrepMyMeeting (&quot;Service&quot;), you agree to be bound by these Terms of Service
+        (&quot;Terms&quot;). If you do not agree to these Terms, do not use the Service.
       </p>
 
       <h2 style={{ marginTop: '30px' }}>2. Description of Service</h2>
@@ -98,7 +98,7 @@ export default function TermsOfServicePage() {
 
       <h2 style={{ marginTop: '30px' }}>11. Disclaimer of Warranties</h2>
       <p style={{ fontSize: '16px', lineHeight: '1.6', color: '#555' }}>
-        THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EITHER
+        THE SERVICE IS PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE&quot; WITHOUT WARRANTIES OF ANY KIND, EITHER
         EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO IMPLIED WARRANTIES OF MERCHANTABILITY,
         FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
       </p>
@@ -121,7 +121,7 @@ export default function TermsOfServicePage() {
       <p style={{ fontSize: '16px', lineHeight: '1.6', color: '#555' }}>
         We may update these Terms from time to time. Continued use of the Service after changes
         constitutes acceptance of the new Terms. We will post the updated Terms with a new
-        "Last updated" date.
+        &quot;Last updated&quot; date.
       </p>
 
       <h2 style={{ marginTop: '30px' }}>15. Governing Law</h2>

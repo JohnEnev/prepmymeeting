@@ -36,7 +36,7 @@ export default function DataDeletionPage() {
         Include the following information:
       </p>
       <ul style={{ fontSize: '16px', lineHeight: '1.8', color: '#555' }}>
-        <li>Subject line: "Data Deletion Request - PrepMyMeeting"</li>
+        <li>Subject line: &quot;Data Deletion Request - PrepMyMeeting&quot;</li>
         <li>Your WhatsApp phone number or Telegram username</li>
         <li>Confirmation that you want all your data deleted</li>
       </ul>

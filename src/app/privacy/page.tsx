@@ -6,7 +6,7 @@ export default function PrivacyPolicyPage() {
 
       <h2 style={{ marginTop: '30px' }}>Introduction</h2>
       <p style={{ fontSize: '16px', lineHeight: '1.6', color: '#555' }}>
-        PrepMyMeeting ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy
+        PrepMyMeeting (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;) is committed to protecting your privacy. This Privacy Policy
         explains how we collect, use, disclose, and safeguard your information when you use our meeting
         preparation assistant service via WhatsApp and Telegram.
       </p>
@@ -90,7 +90,7 @@ export default function PrivacyPolicyPage() {
         <li>Withdraw consent at any time</li>
       </ul>
 
-      <h2 style={{ marginTop: '30px' }}>Children's Privacy</h2>
+      <h2 style={{ marginTop: '30px' }}>Children&apos;s Privacy</h2>
       <p style={{ fontSize: '16px', lineHeight: '1.6', color: '#555' }}>
         Our service is not intended for children under 13 years of age. We do not knowingly collect
         personal information from children under 13.
@@ -99,7 +99,7 @@ export default function PrivacyPolicyPage() {
       <h2 style={{ marginTop: '30px' }}>Changes to This Privacy Policy</h2>
       <p style={{ fontSize: '16px', lineHeight: '1.6', color: '#555' }}>
         We may update this Privacy Policy from time to time. We will notify you of any changes by posting
-        the new Privacy Policy on this page and updating the "Last updated" date.
+        the new Privacy Policy on this page and updating the &quot;Last updated&quot; date.
       </p>
 
       <h2 style={{ marginTop: '30px' }}>Contact Us</h2>
