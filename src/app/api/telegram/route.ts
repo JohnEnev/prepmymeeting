@@ -471,13 +471,17 @@ export async function POST(req: NextRequest) {
       await incrementRequestCount(user.id);
     }
 
-    // Check for greetings first
-    if (text && isGreeting(text)) {
-      const greetingMsg = "Hi there! 👋 I'm here to help you prepare for your meetings and appointments.\n\nWhat's coming up for you? Tell me about your next meeting, or use these commands:\n\n• /prep <topic> - Get a prep checklist (e.g., \"/prep doctor\")\n• /help - See all commands\n\nOr just tell me naturally, like \"I have a contractor meeting tomorrow\"!";
-      await sendTelegramMessage(chatId, greetingMsg);
-      if (user) {
+    // Check for greetings - but only send if welcome message wasn't just sent
+    if (text && isGreeting(text) && user) {
+      const shouldWelcome = await shouldSendWelcomeMessage(user.id);
+      if (!shouldWelcome) {
+        // Only send greeting if we didn't already send the welcome message
+        const greetingMsg = "Hi there! 👋 I'm here to help you prepare for your meetings and appointments.\n\nWhat's coming up for you? Tell me about your next meeting, or use these commands:\n\n• /prep <topic> - Get a prep checklist (e.g., \"/prep doctor\")\n• /help - See all commands\n\nOr just tell me naturally, like \"I have a contractor meeting tomorrow\"!";
+        await sendTelegramMessage(chatId, greetingMsg);
         await logConversation(user.id, greetingMsg, "bot");
+        return NextResponse.json({ ok: true });
       }
+      // If welcome message was sent, just continue processing normally (which will exit gracefully)
       return NextResponse.json({ ok: true });
     }
 

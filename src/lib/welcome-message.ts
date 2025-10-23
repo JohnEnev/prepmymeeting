@@ -12,10 +12,7 @@ I'm your AI meeting prep assistant. Here's what I can help you with:
 
 🔍 **Web Search**: I can search the web for real-time information to make your prep more relevant
 
-⚙️ **Customizable**: You can adjust:
-- Length (short, medium, long)
-- Tone (formal, casual, neutral)
-- Level of detail
+⚙️ **Customizable**: Just tell me how you want me to respond! Ask for shorter/longer answers, more formal or casual tone, more or less detail - I'll adapt
 
 **Try saying:**
 - "I have a client meeting tomorrow about our new product"
