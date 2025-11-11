@@ -104,15 +104,10 @@ export async function fetchURLContent(url: string): Promise<string | null> {
 
     const app = new FirecrawlApp({ apiKey: FIRECRAWL_API_KEY });
 
-    // Use scrapeUrl to get the page content as markdown
-    const scrapeResult = await app.scrapeUrl(url, {
+    // Use scrape to get the page content as markdown
+    const scrapeResult = await app.scrape(url, {
       formats: ["markdown"],
     });
-
-    if (!scrapeResult.success) {
-      console.error(`Firecrawl scrape failed for ${url}`);
-      return null;
-    }
 
     const content = scrapeResult.markdown || "";
 
