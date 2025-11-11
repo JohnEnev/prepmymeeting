@@ -1,9 +1,11 @@
 /**
  * URL parsing and content extraction utilities
- * Uses Jina AI Reader for web scraping
+ * Uses Firecrawl for web scraping
  */
 
-const JINA_READER_BASE_URL = "https://r.jina.ai/";
+import FirecrawlApp from "@mendable/firecrawl-js";
+
+const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
 
 export interface URLInfo {
   url: string;
@@ -89,32 +91,42 @@ export function classifyURL(url: string): URLType {
 }
 
 /**
- * Fetch and parse URL content using Jina AI Reader
+ * Fetch and parse URL content using Firecrawl
  */
 export async function fetchURLContent(url: string): Promise<string | null> {
   try {
-    // Jina AI Reader API: just prepend r.jina.ai/ to any URL
-    const jinaURL = `${JINA_READER_BASE_URL}${url}`;
-
-    console.log(`Fetching URL content via Jina AI: ${jinaURL}`);
-
-    const response = await fetch(jinaURL, {
-      headers: {
-        "Accept": "text/plain",
-        "X-Return-Format": "markdown",
-      },
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      console.error(`Jina AI Reader error: ${response.status} ${response.statusText}`);
+    if (!FIRECRAWL_API_KEY) {
+      console.error("FIRECRAWL_API_KEY not set");
       return null;
     }
 
-    const content = await response.text();
+    console.log(`Fetching URL content via Firecrawl: ${url}`);
+
+    const app = new FirecrawlApp({ apiKey: FIRECRAWL_API_KEY });
+
+    // Use scrapeUrl to get the page content as markdown
+    const scrapeResult = await app.scrapeUrl(url, {
+      formats: ["markdown"],
+    });
+
+    if (!scrapeResult.success) {
+      console.error(`Firecrawl scrape failed for ${url}`);
+      return null;
+    }
+
+    const content = scrapeResult.markdown || "";
+
+    if (!content) {
+      console.error(`Firecrawl returned empty content for ${url}`);
+      return null;
+    }
+
+    console.log(`Firecrawl fetched ${content.length} characters from ${url}`);
+    console.log(`Content preview: ${content.substring(0, 300)}`);
+
     return content;
   } catch (error) {
-    console.error("Error fetching URL content:", error);
+    console.error("Error fetching URL content with Firecrawl:", error);
     return null;
   }
 }
