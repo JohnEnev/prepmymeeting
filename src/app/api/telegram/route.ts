@@ -564,7 +564,13 @@ export async function POST(req: NextRequest) {
 
         // Parse URL
         const urlInfo = await parseURL(url);
-        console.log("Parsed URL info:", urlInfo);
+        console.log("Parsed URL info:", {
+          url: urlInfo.url,
+          type: urlInfo.type,
+          title: urlInfo.title,
+          contentLength: urlInfo.content?.length || 0,
+          hasContent: !!urlInfo.content
+        });
 
         if (urlInfo.content) {
           // Determine topic based on URL type and text
@@ -589,6 +595,11 @@ export async function POST(req: NextRequest) {
 
           // Build context from URL
           const urlContext = buildURLContext(urlInfo);
+          console.log("URL context built:", {
+            contextLength: urlContext.length,
+            topic,
+            preview: urlContext.substring(0, 200)
+          });
 
           // Generate checklist with URL context
           const checklist = await generatePrepChecklist(topic, urlContext);
