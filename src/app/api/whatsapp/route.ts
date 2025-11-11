@@ -762,8 +762,33 @@ export async function POST(req: NextRequest) {
           // Build context from URL
           const urlContext = buildURLContext(urlInfo);
 
-          // Generate checklist with URL context
-          const checklist = await generatePrepChecklist(topic, urlContext);
+          // For restaurants, also search for reviews/reputation
+          let restaurantSearchContext = "";
+          if (urlInfo.type === "restaurant" && urlInfo.title && isSearchEnabled()) {
+            console.log(`[WHATSAPP] 🍽️ Restaurant detected, searching for reviews: ${urlInfo.title}`);
+            try {
+              const searchQuery = `What do people say about ${urlInfo.title} reviews quality service reputation`;
+              const searchResult = await searchWeb(searchQuery);
+              restaurantSearchContext = searchResult.answer;
+              console.log(`[WHATSAPP] ✅ Restaurant reviews fetched: ${restaurantSearchContext.length} chars`);
+
+              // Track search cost
+              if (user) {
+                await trackCost(user.id, COSTS.WEB_SEARCH);
+              }
+            } catch (error) {
+              console.error("[WHATSAPP] Restaurant review search failed:", error);
+              // Continue without review context
+            }
+          }
+
+          // Generate checklist with URL context and optional restaurant reviews
+          const checklist = await generatePrepChecklist(
+            topic,
+            urlContext,
+            undefined,
+            restaurantSearchContext || undefined
+          );
           const chunks = chunkWhatsAppMessage(checklist);
 
           for (const chunk of chunks) {
