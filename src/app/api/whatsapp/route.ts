@@ -263,7 +263,11 @@ async function generatePrepChecklist(
         systemContent += " Keep it SHORT - max 8-10 bullets total.";
       }
 
-      systemContent += " Focus on the most important questions and 2-3 things to bring. Sound natural, like texting a friend. If context from a URL or past conversations is provided, use it to tailor your advice.";
+      systemContent += " Focus on the most important questions and 2-3 things to bring. Sound natural, like texting a friend.";
+
+      if (urlContext) {
+        systemContent += " IMPORTANT: The user shared a URL and I've scraped the full content for you. You MUST reference specific details from the URL content in your response. Do NOT say you can't access the URL - you have all the information right here.";
+      }
 
       let userContent = `Topic: ${topic}`;
       if (pastContext) {
