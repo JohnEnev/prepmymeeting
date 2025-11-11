@@ -696,10 +696,13 @@ export async function POST(req: NextRequest) {
 
     // Check for URLs in message
     if (text) {
+      console.log(`[WHATSAPP] Checking for URLs in text: ${text.substring(0, 100)}...`);
       const urls = extractURLs(text);
+
       if (urls.length > 0) {
-        console.log("URLs detected:", urls);
+        console.log(`[WHATSAPP] ✅ URLs detected (${urls.length}):`, urls);
         const url = urls[0]; // Handle first URL for now
+        console.log(`[WHATSAPP] Processing URL: ${url}`);
 
         // Send acknowledgment
         const ackMsg = "I see you shared a link! Let me fetch that info for you...";
@@ -708,9 +711,16 @@ export async function POST(req: NextRequest) {
           await logConversation(user.id, ackMsg, "bot");
         }
 
+        console.log(`[WHATSAPP] Calling parseURL for: ${url}`);
         // Parse URL
         const urlInfo = await parseURL(url);
-        console.log("Parsed URL info:", urlInfo);
+        console.log(`[WHATSAPP] parseURL completed. Has content: ${!!urlInfo.content}, Type: ${urlInfo.type}`);
+
+        if (urlInfo.content) {
+          console.log(`[WHATSAPP] ✅ URL content successfully fetched (${urlInfo.content.length} chars)`);
+        } else {
+          console.log(`[WHATSAPP] ❌ URL content is null/empty. Summary: ${urlInfo.summary}`);
+        }
 
         if (urlInfo.content) {
           // Determine topic based on URL type and text

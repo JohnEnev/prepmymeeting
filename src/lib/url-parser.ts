@@ -94,34 +94,54 @@ export function classifyURL(url: string): URLType {
  * Fetch and parse URL content using Firecrawl
  */
 export async function fetchURLContent(url: string): Promise<string | null> {
+  console.log(`[URL-PARSER] Starting fetchURLContent for: ${url}`);
+
   try {
+    // Check API key
+    console.log(`[URL-PARSER] FIRECRAWL_API_KEY is ${FIRECRAWL_API_KEY ? 'SET (length: ' + FIRECRAWL_API_KEY.length + ')' : 'NOT SET'}`);
+
     if (!FIRECRAWL_API_KEY) {
-      console.error("FIRECRAWL_API_KEY not set");
+      console.error("[URL-PARSER] ❌ FIRECRAWL_API_KEY not set - cannot fetch URL");
       return null;
     }
 
-    console.log(`Fetching URL content via Firecrawl: ${url}`);
-
+    console.log(`[URL-PARSER] Initializing Firecrawl client...`);
     const app = new FirecrawlApp({ apiKey: FIRECRAWL_API_KEY });
 
-    // Use scrape to get the page content as markdown
+    console.log(`[URL-PARSER] Calling Firecrawl scrape API for ${url}...`);
     const scrapeResult = await app.scrape(url, {
       formats: ["markdown"],
     });
 
-    const content = scrapeResult.markdown || "";
+    console.log(`[URL-PARSER] Firecrawl API call completed. Result type:`, typeof scrapeResult);
+    console.log(`[URL-PARSER] Scrape result keys:`, Object.keys(scrapeResult));
 
-    if (!content) {
-      console.error(`Firecrawl returned empty content for ${url}`);
+    // Check if it's an error response
+    if ('error' in scrapeResult) {
+      console.error(`[URL-PARSER] ❌ Firecrawl returned error:`, scrapeResult.error);
       return null;
     }
 
-    console.log(`Firecrawl fetched ${content.length} characters from ${url}`);
-    console.log(`Content preview: ${content.substring(0, 300)}`);
+    const content = scrapeResult.markdown || "";
+    console.log(`[URL-PARSER] Content extracted. Length: ${content.length} chars`);
+
+    if (!content) {
+      console.error(`[URL-PARSER] ❌ Firecrawl returned empty content for ${url}`);
+      console.error(`[URL-PARSER] Full scrape result:`, JSON.stringify(scrapeResult, null, 2));
+      return null;
+    }
+
+    console.log(`[URL-PARSER] ✅ Successfully fetched ${content.length} characters`);
+    console.log(`[URL-PARSER] Content preview (first 300 chars):`, content.substring(0, 300));
 
     return content;
   } catch (error) {
-    console.error("Error fetching URL content with Firecrawl:", error);
+    console.error("[URL-PARSER] ❌ Exception while fetching URL:", error);
+    if (error instanceof Error) {
+      console.error("[URL-PARSER] Error name:", error.name);
+      console.error("[URL-PARSER] Error message:", error.message);
+      console.error("[URL-PARSER] Error stack:", error.stack);
+    }
     return null;
   }
 }
@@ -130,10 +150,15 @@ export async function fetchURLContent(url: string): Promise<string | null> {
  * Parse URL and extract relevant information
  */
 export async function parseURL(url: string): Promise<URLInfo> {
+  console.log(`[URL-PARSER] Starting parseURL for: ${url}`);
+
   const type = classifyURL(url);
+  console.log(`[URL-PARSER] Classified URL type: ${type}`);
+
   const content = await fetchURLContent(url);
 
   if (!content) {
+    console.log(`[URL-PARSER] ❌ Failed to fetch content, returning error response`);
     return {
       url,
       type,
@@ -142,14 +167,19 @@ export async function parseURL(url: string): Promise<URLInfo> {
     };
   }
 
+  console.log(`[URL-PARSER] ✅ Content fetched successfully, processing...`);
+
   // Extract title from markdown (usually first # heading)
   const titleMatch = content.match(/^#\s+(.+)$/m);
   const title = titleMatch ? titleMatch[1] : undefined;
+  console.log(`[URL-PARSER] Extracted title: ${title || 'none'}`);
 
   // Truncate content if too long (keep first 5000 chars for context)
   const truncatedContent = content.length > 5000
     ? content.slice(0, 5000) + "\n\n[Content truncated...]"
     : content;
+
+  console.log(`[URL-PARSER] Final content length: ${truncatedContent.length} chars (truncated: ${content.length > 5000})`);
 
   return {
     url,
