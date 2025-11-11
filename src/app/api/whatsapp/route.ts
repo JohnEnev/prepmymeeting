@@ -202,6 +202,11 @@ async function generatePrepChecklist(
 
       promptParts.push("Focus on the most important questions and 2-3 things to bring.");
       promptParts.push("Sound natural, like texting a friend.");
+
+      if (urlContext) {
+        promptParts.push("CRITICAL INSTRUCTION: You have the FULL scraped content from the URL the user shared. You MUST cite specific details like prices, addresses, features, names, or other concrete information from that content. If you don't reference specific details from the URL, your response will FAIL. Start your response by acknowledging what you found in the link.");
+      }
+
       promptParts.push("");
       promptParts.push(`Topic: ${topic}`);
 
@@ -266,7 +271,7 @@ async function generatePrepChecklist(
       systemContent += " Focus on the most important questions and 2-3 things to bring. Sound natural, like texting a friend.";
 
       if (urlContext) {
-        systemContent += " IMPORTANT: The user shared a URL and I've scraped the full content for you. You MUST reference specific details from the URL content in your response. Do NOT say you can't access the URL - you have all the information right here.";
+        systemContent += " CRITICAL INSTRUCTION: You have the FULL scraped content from the URL the user shared. You MUST cite specific details like prices, addresses, features, names, or other concrete information from that content. If you don't reference specific details from the URL, your response will FAIL. Start your response by acknowledging what you found in the link.";
       }
 
       let userContent = `Topic: ${topic}`;
@@ -297,6 +302,13 @@ async function generatePrepChecklist(
 
       if (!OPENAI_MODEL.toLowerCase().startsWith("o4")) {
         payload.temperature = 0.4;
+      }
+
+      // Log the actual prompt being sent (for debugging URL context)
+      if (urlContext) {
+        console.log(`[OPENAI] System prompt with URL context: ${systemContent.substring(systemContent.length - 200)}`);
+        console.log(`[OPENAI] User content length: ${userContent.length} chars`);
+        console.log(`[OPENAI] URL context preview (first 500 chars): ${urlContext.substring(0, 500)}`);
       }
 
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
